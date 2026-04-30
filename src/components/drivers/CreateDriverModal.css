@@ -1,0 +1,19 @@
+.create-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--g200);
+  padding: 0 20px;
+  background: var(--g50);
+  flex-shrink: 0;
+}
+
+.ctab {
+  padding: 11px 18px;
+  font-size: 12px; font-weight: 500;
+  cursor: pointer;
+  color: var(--g400);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+}
+.ctab:hover { color: var(--g700); }
+.ctab.on { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }

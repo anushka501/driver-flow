@@ -1,0 +1,96 @@
+.topbar {
+  height: var(--th);
+  background: var(--yellow);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 10px;
+  border-bottom: 1px solid rgba(0,0,0,.1);
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.tb-logo { flex-shrink: 0; }
+
+.z-logo {
+  width: 30px; height: 30px;
+  background: var(--g900);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px;
+  color: #fff;
+  font-family: var(--mono);
+  cursor: pointer;
+}
+
+/* Page title */
+.tb-page-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600;
+  color: var(--g900);
+  flex-shrink: 0;
+}
+
+/* Search */
+.tb-search {
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(0,0,0,.1);
+  border-radius: var(--r);
+  padding: 0 8px;
+  height: 30px;
+  min-width: 200px;
+  max-width: 380px;
+}
+.tb-search input {
+  background: none; border: none; outline: none;
+  font-size: 12px; color: var(--g700);
+  font-family: var(--font);
+  flex: 1; min-width: 0;
+}
+
+.tb-icon-btn {
+  width: 22px; height: 22px;
+  border: none; background: none;
+  cursor: pointer; color: var(--g600);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.tb-icon-btn:hover { background: rgba(0,0,0,.08); }
+
+/* Right side */
+.tb-right {
+  display: flex; align-items: center; gap: 6px;
+}
+.tb-pagination {
+  display: flex; align-items: center; gap: 2px;
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(0,0,0,.1);
+  border-radius: 6px;
+  padding: 0 6px;
+  height: 28px;
+}
+.tb-page-input {
+  width: 40px; border: none; background: none;
+  font-size: 12px; font-family: var(--mono);
+  color: var(--g700); text-align: center;
+  outline: none;
+}
+.tb-page-input::-webkit-outer-spin-button,
+.tb-page-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tb-page-sep { color: var(--g400); font-size: 14px; }
+
+.tb-refresh { margin-right: 2px; }
+
+.tb-user {
+  font-size: 12px; font-weight: 500;
+  color: var(--g800);
+}
+
+@media (max-width: 768px) {
+  .tb-search { display: none; }
+  .tb-pagination { display: none; }
+  .tb-page-title span { display: none; }
+}

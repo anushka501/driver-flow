@@ -1,0 +1,30 @@
+.sidebar {
+  width: var(--sw);
+  background: var(--w);
+  border-right: 1px solid var(--g200);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0 12px;
+  flex-shrink: 0;
+}
+
+.sico {
+  width: 34px; height: 34px;
+  border-radius: var(--r);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--g400);
+  margin: 2px 0;
+  transition: all 0.15s;
+  background: none;
+  border: none;
+  outline: none;
+}
+.sico svg { width: 15px; height: 15px; }
+.sico:hover { background: var(--g100); color: var(--g700); }
+.sico.on  { background: var(--bl); color: var(--blue); }
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+}
