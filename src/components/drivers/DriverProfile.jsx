@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Avatar from '../shared/Avatar';
 import { Icons } from '../../assets/icons';
-import { statusBadgeClass, statusLabel, docStatusBadgeClass } from '../../utils/helpers';
+import { statusBadgeClass, statusLabel, docStatusBadgeClass , tagBool, getTag, formatUpdatedAt} from '../../utils/helpers';
 
 const TABS = [
   { id: 'overview',   label: 'Overview'       },
@@ -21,7 +21,30 @@ const DOC_TYPES = [
   'POLLUTION', 'REGISTRATION', 'SAFETY_STICKER', 'VEHICLE_FITNESS', 'OTHERS',
 ];
 
-export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, onRejectDoc, onAssignDoc, activeTabOverride }) {
+function normalizeDoc(doc, docType) {
+  if (!doc) return null;
+  if (typeof doc === 'string') {
+    return {
+      id: doc,
+      documentId: doc,
+      fileName: doc,
+      status: 'PENDING_VERIFICATION',
+      type: docType,
+    };
+  }
+
+  return {
+    ...doc,
+    id: doc.id || doc.documentId,
+    documentId: doc.documentId || doc.id,
+    fileName: doc.fileName || doc.filename || doc.meta?.filename || doc.documentId || doc.id,
+    fileUrl: doc.fileUrl || doc.url || doc.downloadUrl,
+    status: doc.status || 'PENDING_VERIFICATION',
+    type: doc.type || docType,
+  };
+}
+
+export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, onRejectDoc, onAssignDoc,onUpdate, activeTabOverride }) {
   const [activeTab, setActiveTab] = useState(activeTabOverride || 'overview');
 
   if (!driver) return null;
@@ -60,7 +83,7 @@ export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, on
       </div>
 
       {activeTab === 'overview'    && <OverviewTab    driver={driver} onTabSwitch={setActiveTab} />}
-      {activeTab === 'profile'     && <ProfileTab     driver={driver} />}
+      {activeTab === 'profile'     && <ProfileTab     driver={driver} onUpdate={onUpdate} />}
       {activeTab === 'documents'   && <DocumentsTab   driver={driver} onApprove={onApproveDoc} onReject={onRejectDoc} onAssign={onAssignDoc} />}
       {activeTab === 'vehicles'    && <VehiclesTab    driver={driver} />}
       {activeTab === 'location'    && <LocationTab    driver={driver} />}
@@ -134,7 +157,29 @@ function OverviewTab({ driver, onTabSwitch }) {
 }
 
 /* ── PROFILE TAB ── */
-function ProfileTab({ driver }) {
+function ProfileTab({ driver, onUpdate }) {
+  const [saving, setSaving] = useState(null)
+
+  // Tags store the boolean values as strings "true"/"false"
+  const isActive        = tagBool(driver, 'isActive')
+  const zeroCertified   = tagBool(driver, 'zeroCertified')
+  const pushNotifs      = tagBool(driver, 'pushNotifications')
+  const phone           = getTag(driver, 'phone') || driver.phone || ''
+
+  async function handleToggle(tagKey, currentVal) {
+    setSaving(tagKey)
+    try {
+      await onUpdate(driver.id, {
+        tags: {
+          ...(driver.tags || {}),
+          [tagKey]: String(!currentVal),
+        },
+      })
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <div className="fade-in">
       <div className="two-col">
@@ -142,58 +187,94 @@ function ProfileTab({ driver }) {
           <div className="ib-hdr">Personal Information</div>
           <div className="ib-grid">
             <div className="ib-row"><span className="ib-key">Full Name</span><span className="ib-val">{driver.name || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">Phone</span><span className="ib-val ib-val-mono">{driver.phone || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">Email</span><span className="ib-val">{driver.email || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">Date of Birth</span><span className="ib-val">{driver.dob || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row full"><span className="ib-key">Address</span><span className="ib-val">{driver.address || <span className="ib-val-empty">—</span>}</span></div>
+            <div className="ib-row"><span className="ib-key">Phone</span><span className="ib-val ib-val-mono">{phone || <span className="ib-val-empty">—</span>}</span></div>
+            <div className="ib-row"><span className="ib-key">Driver Type</span><span className="ib-val">{getTag(driver, 'driverType') || <span className="ib-val-empty">—</span>}</span></div>
+            <div className="ib-row"><span className="ib-key">License Plate</span><span className="ib-val ib-val-mono">{getTag(driver, 'licensePlate') || <span className="ib-val-empty">—</span>}</span></div>
           </div>
         </div>
+
         <div className="ib">
           <div className="ib-hdr">Driver Details</div>
           <div className="ib-grid">
             <div className="ib-row"><span className="ib-key">Driver ID</span><span className="ib-val ib-val-mono">{driver.id}</span></div>
-            <div className="ib-row"><span className="ib-key">User ID</span><span className="ib-val ib-val-mono">{driver.userId || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">License No.</span><span className="ib-val ib-val-mono">{driver.licenseNo || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">License Expiry</span><span className="ib-val">{driver.licenseExpiry || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">Vendor</span><span className="ib-val">{driver.vendor || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">Joined</span><span className="ib-val">{driver.joinedAt || <span className="ib-val-empty">—</span>}</span></div>
+            <div className="ib-row"><span className="ib-key">Status</span><span className={`badge ${statusBadgeClass(driver.status)}`}>{statusLabel(driver.status)}</span></div>
+            <div className="ib-row"><span className="ib-key">Vendor ID</span><span className="ib-val ib-val-mono">{driver.vendorId || <span className="ib-val-empty">—</span>}</span></div>
+            <div className="ib-row"><span className="ib-key">Last Updated</span><span className="ib-val">{formatUpdatedAt(driver.updatedAt)}</span></div>
           </div>
         </div>
       </div>
+
       <div className="ib">
         <div className="ib-hdr">Account Settings</div>
         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <ToggleRow label="Active" sublabel="Driver is available for assignments" defaultOn={driver.isActive} />
-          <ToggleRow label="Zero Certified" sublabel="Driver has completed Zero certification" defaultOn={driver.zeroCertified} />
-          <ToggleRow label="Push Notifications" sublabel="Receive ride and alert notifications" defaultOn />
+          <ToggleRow
+            label="Active"
+            sublabel="Driver is available for assignments"
+            value={isActive}
+            saving={saving === 'isActive'}
+            onChange={() => handleToggle('isActive', isActive)}
+          />
+          <ToggleRow
+            label="Zero Certified"
+            sublabel="Driver has completed Zero certification"
+            value={zeroCertified}
+            saving={saving === 'zeroCertified'}
+            onChange={() => handleToggle('zeroCertified', zeroCertified)}
+          />
+          <ToggleRow
+            label="Push Notifications"
+            sublabel="Receive ride and alert notifications"
+            value={pushNotifs}
+            saving={saving === 'pushNotifications'}
+            onChange={() => handleToggle('pushNotifications', pushNotifs)}
+          />
         </div>
       </div>
     </div>
-  );
+  )
 }
 
-function ToggleRow({ label, sublabel, defaultOn = false }) {
-  const [on, setOn] = useState(defaultOn);
+function ToggleRow({ label, sublabel, value, onChange, saving }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       <div>
         <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--g800)' }}>{label}</div>
         <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 2 }}>{sublabel}</div>
       </div>
-      <button className={`toggle${on ? '' : ' off'}`} onClick={() => setOn(!on)}>
-        <div className="toggle-knob" />
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {saving && <span style={{ fontSize: 10, color: 'var(--g400)', fontFamily: 'var(--mono)' }}>Saving...</span>}
+        <button
+          className={`toggle${value ? '' : ' off'}`}
+          onClick={onChange}
+          disabled={saving}
+          style={{ opacity: saving ? 0.6 : 1 }}
+        >
+          <div className="toggle-knob" />
+        </button>
+      </div>
     </div>
-  );
+  )
 }
 
 /* ── DOCUMENTS TAB ── matching Image 4 exactly ── */
 function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
   const docs = driver.documents || {};
 
+  function normaliseDoc(raw) {
+    if (!raw) return null
+    if (typeof raw === 'string') return { documentId: raw, id: raw, status: null, fileName: null, fileUrl: null }
+    return {
+      documentId: raw.documentId || raw.id || null,
+      id:         raw.documentId || raw.id || null,
+      status:     raw.status     || null,
+      fileName:   raw.meta?.filename || raw.fileName || null,
+      fileUrl:    raw.fileUrl    || null,
+    }
+  }
+
   return (
     <div className="fade-in">
-      {/* Driver Information header — matching Image 4 */}
+      {/* Driver Information header */}
       <div style={{ background: 'var(--w)', border: '1px solid var(--g200)', borderRadius: 'var(--r2)', padding: '16px 20px', marginBottom: 16, boxShadow: 'var(--sh)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--g500)" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -221,35 +302,42 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
             </thead>
             <tbody>
               {DOC_TYPES.map(docType => {
-                const doc = docs[docType];
-                const hasDoc = doc && doc.fileName;
+                const doc = normaliseDoc(docs[docType]);
+                const hasDoc = !!doc;
+                const statusVal = doc?.status;
                 return (
                   <tr key={docType}>
                     <td className="dt">{docType}</td>
                     <td>
-                      {hasDoc
+                      {doc?.fileName
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g600)' }}>{doc.fileName}</span>
-                        : <span className="nd">—</span>
+                        : hasDoc
+                          ? <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g400)' }}>{doc.id?.slice(0, 16)}…</span>
+                          : <span className="nd">—</span>
                       }
                     </td>
                     <td>
-                      {hasDoc && doc.status
-                        ? <span className={`badge ${docStatusBadgeClass(doc.status)}`}>{doc.status}</span>
-                        : <span className="nd">—</span>
+                      {hasDoc && statusVal
+                        ? <span className={`badge ${docStatusBadgeClass(statusVal)}`}>{statusVal}</span>
+                        : hasDoc
+                          ? <span className="badge badge-gray">UPLOADED</span>
+                          : <span className="nd">—</span>
                       }
                     </td>
                     <td>
-                      {hasDoc
+                      {doc?.fileUrl
                         ? (
-                          <button className="btn btn-sm" onClick={() => window.open(doc.fileUrl || '#', '_blank')}>
+                          <button className="btn btn-sm" onClick={() => window.open(doc.fileUrl, '_blank')}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                           </button>
                         )
-                        : <span className="nd">No Document</span>
+                        : hasDoc
+                          ? <span className="nd" style={{ fontSize: 10 }}>No URL</span>
+                          : <span className="nd">No Document</span>
                       }
                     </td>
+
                     <td>
-                      {/* Review actions ONLY visible when doc is uploaded — matching Image 4 */}
                       {hasDoc ? (
                         <div style={{ display: 'flex', gap: 5 }}>
                           <button

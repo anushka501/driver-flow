@@ -1,9 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Avatar from '../shared/Avatar';
 import { Icons } from '../../assets/icons';
-import {
-  statusBadgeClass, statusDotClass, statusLabel, docStatusBadgeClass,
-} from '../../utils/helpers';
+import { statusBadgeClass, statusDotClass, statusLabel, docStatusBadgeClass } from '../../utils/helpers'
 
 // ── Sort helpers ──────────────────────────────────────────────────────────────
 function SortIcon({ col, sortCol, sortDir }) {
@@ -21,7 +19,7 @@ function docVerifLabel(driver) {
   if (!docs.length) return 'UNVERIFIED';
   if (docs.every(d => d?.status === 'APPROVED')) return 'VERIFIED';
   if (docs.some(d => d?.status === 'REJECTED')) return 'REJECTED';
-  if (docs.some(d => d?.status === 'PENDING')) return 'PENDING';
+  if (docs.some(d => d?.status === 'PENDING' || d?.status === 'PENDING_VERIFICATION' || typeof d === 'string')) return 'PENDING';
   return 'UNVERIFIED';
 }
 
@@ -53,8 +51,8 @@ export default function DriverTable({
       const matchSearch = !search ||
         d.name?.toLowerCase().includes(q) ||
         d.id?.toLowerCase().includes(q);
-      const matchStatus = !statusFilter || d.status === statusFilter;
-      const matchVendor = !vendorFilter || d.vendor === vendorFilter;
+      const matchStatus = !statusFilter || statusFilter === 'all' || d.status === statusFilter;
+      const matchVendor = !vendorFilter || vendorFilter === 'all' || d.vendor === vendorFilter;
 
       // Stat-card filter
       let matchStat = true;
@@ -66,7 +64,7 @@ export default function DriverTable({
         const docs = Object.values(d.documents || {});
         matchStat = docs.length > 0 && docs.every(doc => doc?.status === 'APPROVED');
       } else if (statFilter === 'DOCS_PENDING') {
-        matchStat = Object.values(d.documents || {}).some(doc => doc?.status === 'PENDING');
+        matchStat = Object.values(d.documents || {}).some(doc => doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION' || typeof doc === 'string');
       } else if (statFilter === 'DOCS_UNVERIFIED') {
         matchStat = Object.values(d.documents || {}).some(doc => !doc?.status);
       } else if (statFilter === 'DOCS_REJECTED') {
@@ -230,7 +228,6 @@ function DriverRow({ driver, onView, onEdit, onDelete, onViewDocs, onViewVendor 
       >
         <span className={`badge ${dvClass}`}>{dvLabel}</span>
       </td>
-
       {/* Vehicle */}
       <td onClick={e => e.stopPropagation()}>
         {driver.vehiclePlate ? (
