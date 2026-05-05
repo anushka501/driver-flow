@@ -65,3 +65,52 @@ export function reviewDocument(docId, status, reviewedBy = 'admin', reason = '')
     })),
   })
 }
+
+// GET /documents?entityId=<driverId> — fetch all doc records for a driver
+// Tries multiple path shapes to handle API variation
+export async function getDocuments(entityId) {
+  const paths = [
+    `/documents?entityId=${encodeURIComponent(entityId)}`,
+    `/documents/entity/${encodeURIComponent(entityId)}`,
+    `/documents/${encodeURIComponent(entityId)}`,
+  ]
+
+  let lastError
+  for (const path of paths) {
+    try {
+      const data = await request(path)
+      if (data !== null && data !== undefined) return data
+    } catch (err) {
+      lastError = err
+      console.warn('getDocuments failed:', path, err.message)
+    }
+  }
+
+  throw lastError
+}
+
+// Normalize any shape the documents API returns into a { [TYPE]: docObject } map
+export function normalizeDocuments(data) {
+  let list = []
+
+  if (Array.isArray(data)) {
+    list = data
+  } else if (data && typeof data === 'object') {
+    const key = ['documents', 'items', 'Items', 'results', 'data', 'content']
+      .find(k => Array.isArray(data[k]))
+    if (key) {
+      list = data[key]
+    } else {
+      // Already a { TYPE: docObj } map — return as-is
+      return data
+    }
+  }
+
+  // Convert array to map keyed by type
+  const map = {}
+  list.forEach(doc => {
+    const type = doc?.type || doc?.documentType || ''
+    if (type) map[type] = doc
+  })
+  return map
+}

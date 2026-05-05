@@ -1,49 +1,62 @@
 import React, { useEffect, useState } from 'react'
 import Modal from '../shared/Modal'
 import { createDriver } from '../../api/drivers'
-import { getVendors } from '../../api/vendors'
+import { searchVendors } from '../../api/vendors'
 import { getTag } from '../../utils/helpers'
 
 function normalizeVendors(data) {
-  const rows =
-    (Array.isArray(data) && data) ||
-    data?.vendors ||
-    data?.vendorList ||
-    data?.items ||
-    data?.Items ||
-    data?.results ||
-    data?.data ||
-    data?.content ||
-    []
+  // /vendors/search returns { total: N, vendors: [...] }
+  // Each vendor has at minimum: id, name
+  let rows
+
+  if (Array.isArray(data)) {
+    rows = data
+  } else if (data && typeof data === 'object') {
+    const listKey = ['vendors', 'vendorList', 'items', 'Items', 'results', 'data', 'content']
+      .find(k => Array.isArray(data[k]))
+
+    if (listKey) {
+      rows = data[listKey]
+    } else {
+      // Plain object map: { "V001": { name: "Acme" }, ... }
+      rows = Object.entries(data).map(([key, val]) => {
+        if (val && typeof val === 'object') return { id: key, ...val }
+        if (typeof val === 'string')        return { id: key, name: val }
+        return { id: key }
+      })
+    }
+  } else {
+    rows = []
+  }
 
   const normalized = rows
     .map(vendor => {
       if (typeof vendor === 'string') return { id: vendor, label: vendor }
 
       const id =
-        vendor?.id ||
-        vendor?.vendorId ||
-        vendor?.vendor_id ||
-        vendor?.pk ||
-        vendor?.PK ||
+        vendor?.id         ||
+        vendor?.vendorId   ||
+        vendor?.vendor_id  ||
+        vendor?.pk         ||
+        vendor?.PK         ||
         ''
+
       const name =
-        vendor?.name ||
-        vendor?.vendorName ||
+        vendor?.name        ||
+        vendor?.vendorName  ||
         vendor?.displayName ||
         vendor?.companyName ||
-        vendor?.legalName ||
+        vendor?.legalName   ||
         ''
 
       if (!id) return null
-      return {
-        id,
-        label: name && id ? `${name} (${id})` : name || id,
-      }
+
+      // Show name only — fall back to id if name is missing
+      return { id, label: name || id }
     })
     .filter(Boolean)
 
-  return [...new Map(normalized.map(vendor => [vendor.id, vendor])).values()]
+  return [...new Map(normalized.map(v => [v.id, v])).values()]
 }
 
 export default function CreateDriverModal({ open, onClose, onDriverCreated, existingDrivers = [] }) {
@@ -69,7 +82,7 @@ export default function CreateDriverModal({ open, onClose, onDriverCreated, exis
     setVendorsLoading(true)
     setVendorsError('')
 
-    getVendors('*')
+    searchVendors({ query: '*' })
       .then(data => {
         if (cancelled) return
         const normalized = normalizeVendors(data)

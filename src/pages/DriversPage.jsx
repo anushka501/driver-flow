@@ -10,6 +10,7 @@ import { Icons } from '../assets/icons'
 import { useToast } from '../hooks/useToast'
 import { useAuth } from '../auth/AuthContext'
 import { getDriver, getDrivers, updateDriver } from '../api/drivers'
+import { searchVendors } from '../api/vendors'
 import { createAndUploadDocument, reviewDocument } from '../api/documents'
 import { tagBool } from '../utils/helpers'
 import '../components/drivers/CreateDriverModal.css'
@@ -25,17 +26,34 @@ export default function DriversPage() {
   const [activeTabOverride, setActiveTabOverride] = useState(null)
   const [createOpen, setCreateOpen]               = useState(false)
   const [assignDocDriver, setAssignDocDriver]     = useState(null)
-  const [vendorModal, setVendorModal] = useState({ open: false, id: null })
-  const [statusFilter, setStatusFilter]  = useState(null)
-  // ── Fetch drivers using search endpoint ─────────────────
+  const [vendorModal, setVendorModal]             = useState({ open: false, id: null, name: null })
+  const [statusFilter, setStatusFilter]           = useState(null)
+
+  // ── Fetch drivers + vendors in parallel ─────────────────
   const fetchDrivers = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await getDrivers('*')
+      const [driverData, vendorData] = await Promise.all([
+        getDrivers('*'),
+        searchVendors({ query: '*' }).catch(() => ({ vendors: [] })),
+      ])
+
+      // Build vendorId → name lookup map
+      const vendorList = Array.isArray(vendorData) ? vendorData : (vendorData?.vendors ?? [])
+      const vendorMap = {}
+      vendorList.forEach(v => { if (v?.id) vendorMap[v.id] = v.name || v.id })
+
       // API returns { drivers: [...] }
-      const list = Array.isArray(data) ? data : (data?.drivers ?? [])
-      setDrivers(list)
+      const list = Array.isArray(driverData) ? driverData : (driverData?.drivers ?? [])
+
+      // Enrich each driver with resolved vendor name
+      const enriched = list.map(d => ({
+        ...d,
+        vendor:     vendorMap[d.vendorId] || d.vendorName || d.vendor || d.vendorId || '',
+        vendorName: vendorMap[d.vendorId] || d.vendorName || '',
+      }))
+      setDrivers(enriched)
     } catch (err) {
       setError(err.message)
       showToast('Failed to load', err.message)
@@ -48,18 +66,35 @@ export default function DriversPage() {
 
   // ── Stats — computed from real data ─────────────────────
   const stats = {
-    total:             drivers.length,
-    verified:          drivers.filter(d => d.status === 'VERIFIED').length,
-    policeVerified:    drivers.filter(d => d.status === 'POLICE_VERIFIED').length,
-    unverified:        drivers.filter(d => d.status === 'UNVERIFIED').length,
-    zeroCertified:     drivers.filter(d => tagBool(d, 'zeroCertified')).length,
-    docsVerified:      drivers.reduce((n, d) => n + Object.values(d.documents || {}).filter(doc => doc?.status === 'APPROVED').length, 0),
-    docsPendingReview: drivers.reduce((n, d) => n + Object.values(d.documents || {}).filter(doc => {
-      const status = typeof doc === 'string' ? 'PENDING_VERIFICATION' : doc?.status
-      return status === 'PENDING' || status === 'PENDING_VERIFICATION'
-    }).length, 0),
-    docsUnverified:    drivers.reduce((n, d) => n + Object.values(d.documents || {}).filter(doc => !doc?.status).length, 0),
-    docsRejected:      drivers.reduce((n, d) => n + Object.values(d.documents || {}).filter(doc => doc?.status === 'REJECTED').length, 0),
+    total:          drivers.length,
+    verified:       drivers.filter(d => d.status === 'VERIFIED').length,
+    policeVerified: drivers.filter(d => d.status === 'POLICE_VERIFIED' || tagBool(d, 'policeVerified')).length,
+    unverified:     drivers.filter(d => d.status === 'UNVERIFIED').length,
+    zeroCertified:  drivers.filter(d => tagBool(d, 'zeroCertified')).length,
+
+    // documents from the list API are doc-ID strings (no .status).
+    // A string value = uploaded/pending. An object with status = reviewed.
+    docsVerified: drivers.filter(d => {
+      const docs = Object.values(d.documents || {})
+      return docs.length > 0 && docs.every(doc => typeof doc === 'object' && doc?.status === 'APPROVED')
+    }).length,
+
+    docsPendingReview: drivers.filter(d =>
+      Object.values(d.documents || {}).some(doc => {
+        if (typeof doc === 'string') return true  // raw doc ID = pending upload
+        return doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION'
+      })
+    ).length,
+
+    docsUnverified: drivers.filter(d =>
+      Object.keys(d.documents || {}).length === 0 && (d.docCount ?? 0) === 0
+    ).length,
+
+    docsRejected: drivers.filter(d =>
+      Object.values(d.documents || {}).some(doc =>
+        typeof doc === 'object' && doc?.status === 'REJECTED'
+      )
+    ).length,
   }
 
   // ── Navigation ───────────────────────────────────────────
@@ -86,7 +121,6 @@ export default function DriversPage() {
 
   // ── Update driver (toggles, status) ─────────────────────
   async function handleUpdateDriver(driverId, fields) {
-    // Find current driver to merge tags
     const current = drivers.find(d => d.id === driverId)
     if (!current) return
 
@@ -270,39 +304,43 @@ export default function DriversPage() {
                   if (statusFilter === 'ZERO_CERTIFIED')
                     return drivers.filter(d => tagBool(d, 'zeroCertified'))
 
+                  if (statusFilter === 'POLICE_VERIFIED')
+                    return drivers.filter(d => d.status === 'POLICE_VERIFIED' || tagBool(d, 'policeVerified'))
+
                   if (statusFilter === 'DOCS_VERIFIED')
-                    return drivers.filter(d =>
-                      Object.values(d.documents || {}).every(doc => doc?.status === 'APPROVED')
-                    )
+                    return drivers.filter(d => {
+                      const docs = Object.values(d.documents || {})
+                      return docs.length > 0 && docs.every(doc => typeof doc === 'object' && doc?.status === 'APPROVED')
+                    })
 
                   if (statusFilter === 'DOCS_PENDING')
                     return drivers.filter(d =>
-                      Object.values(d.documents || {}).some(doc =>
-                        doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION'
-                      )
+                      Object.values(d.documents || {}).some(doc => {
+                        if (typeof doc === 'string') return true  // raw doc ID = pending upload
+                        return doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION'
+                      })
                     )
 
                   if (statusFilter === 'DOCS_UNVERIFIED')
                     return drivers.filter(d =>
-                      Object.values(d.documents || {}).length === 0
+                      Object.keys(d.documents || {}).length === 0 && (d.docCount ?? 0) === 0
                     )
 
                   if (statusFilter === 'DOCS_REJECTED')
                     return drivers.filter(d =>
-                      Object.values(d.documents || {}).some(doc => doc?.status === 'REJECTED')
+                      Object.values(d.documents || {}).some(doc =>
+                        typeof doc === 'object' && doc?.status === 'REJECTED'
+                      )
                     )
 
-                  if (statusFilter === 'POLICE_VERIFIED')
-                    return drivers.filter(d => tagBool(d, 'policeVerified'))
-
-                  // fallback → normal status
+                  // fallback → status match (VERIFIED / UNVERIFIED / PENDING_VERIFICATION)
                   return drivers.filter(d => d.status === statusFilter)
                 })()}
                 onView={handleViewDriver}
                 onEdit={() => setCreateOpen(true)}
                 onDelete={() => showToast('Delete', 'Wire up delete API when ready.')}
                 onViewDocs={handleViewDriverDocs}
-                onViewVendor={id => setVendorModal({ open: true, id })}
+                onViewVendor={({ id, name }) => setVendorModal({ open: true, id, name })}
               />
             )}
           </>
@@ -323,8 +361,9 @@ export default function DriversPage() {
       />
       <VendorModal
         open={vendorModal.open}
-        onClose={() => setVendorModal({ open: false, id: null })}
+        onClose={() => setVendorModal({ open: false, id: null, name: null })}
         vendorId={vendorModal.id}
+        vendorName={vendorModal.name}
       />
     </AppLayout>
   )

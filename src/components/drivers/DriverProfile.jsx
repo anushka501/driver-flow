@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Avatar from '../shared/Avatar';
 import { Icons } from '../../assets/icons';
 import { statusBadgeClass, statusLabel, docStatusBadgeClass , tagBool, getTag, formatUpdatedAt} from '../../utils/helpers';
@@ -258,17 +258,64 @@ function ToggleRow({ label, sublabel, value, onChange, saving }) {
 
 /* ── DOCUMENTS TAB ── matching Image 4 exactly ── */
 function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
-  const docs = driver.documents || {};
+  const [apiDocMap, setApiDocMap]     = useState(null)   // null = not yet loaded
+  const [docsLoading, setDocsLoading] = useState(true)
+  const [docsError, setDocsError]     = useState('')
 
-  function normaliseDoc(raw) {
+  useEffect(() => {
+    let cancelled = false
+    setDocsLoading(true)
+    setDocsError('')
+
+    import('../../api/documents').then(({ getDocuments, normalizeDocuments }) =>
+      getDocuments(driver.id)
+    ).then(raw => {
+      if (cancelled) return
+      // normalizeDocuments converts array or wrapped response → { TYPE: docObj }
+      import('../../api/documents').then(({ normalizeDocuments }) => {
+        const map = normalizeDocuments(raw)
+        setApiDocMap(map)
+        setDocsLoading(false)
+      })
+    }).catch(err => {
+      if (cancelled) return
+      console.warn('getDocuments failed, using embedded data:', err.message)
+      setDocsError('Could not fetch live document details.')
+      setApiDocMap(null)
+      setDocsLoading(false)
+    })
+
+    return () => { cancelled = true }
+  }, [driver.id])
+
+  // Merge: API data wins; fall back to embedded driver.documents
+  const embeddedDocs = driver.documents || {}
+
+  function resolveDoc(docType) {
+    // Use api map if loaded, otherwise embedded
+    const source = apiDocMap ?? embeddedDocs
+    const raw = source[docType]
+
     if (!raw) return null
-    if (typeof raw === 'string') return { documentId: raw, id: raw, status: null, fileName: null, fileUrl: null }
+    if (typeof raw === 'string') {
+      return {
+        documentId: raw,
+        id: raw,
+        status: null,
+        fileName: null,
+        fileUrl: null,
+        uploadedAt: null,
+        reviewedBy: null,
+      }
+    }
     return {
       documentId: raw.documentId || raw.id || null,
       id:         raw.documentId || raw.id || null,
       status:     raw.status     || null,
-      fileName:   raw.meta?.filename || raw.fileName || null,
-      fileUrl:    raw.fileUrl    || null,
+      fileName:   raw.meta?.filename || raw.fileName || raw.filename || null,
+      fileUrl:    raw.fileUrl    || raw.downloadUrl  || raw.url || null,
+      uploadedAt: raw.meta?.date || raw.createdAt    || raw.uploadedAt || null,
+      reviewedBy: raw.reviewMeta?.reviewedBy         || raw.reviewedBy || null,
     }
   }
 
@@ -284,38 +331,65 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
         <div style={{ fontSize: 12, color: 'var(--g600)' }}>Name: {driver.name}</div>
       </div>
 
+      {docsError && (
+        <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--ol)', border: '1px solid var(--ob)', borderRadius: 'var(--r)', fontSize: 11, color: 'var(--orange)' }}>
+          ⚠ {docsError} Showing cached data.
+        </div>
+      )}
+
       <div style={{ background: 'var(--w)', border: '1px solid var(--g200)', borderRadius: 'var(--r2)', boxShadow: 'var(--sh)', overflow: 'hidden' }}>
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--g100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--g800)' }}>Documents</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--g800)' }}>
+            Documents
+            {docsLoading && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--g400)', fontWeight: 400 }}>Loading…</span>
+            )}
+          </span>
           <button className="btn btn-primary btn-sm" onClick={() => onAssign && onAssign(driver)}>+ Assign Document</button>
         </div>
         <div style={{ overflowX: 'auto' }}>
-          <table className="dtbl" style={{ minWidth: 700 }}>
+          <table className="dtbl" style={{ minWidth: 820 }}>
             <thead>
               <tr>
                 <th>Document Type</th>
+                <th>Document ID</th>
                 <th>File Name</th>
                 <th>Status</th>
+                <th>Uploaded At</th>
+                <th>Reviewed By</th>
                 <th>Document</th>
                 <th>Review Actions</th>
               </tr>
             </thead>
             <tbody>
               {DOC_TYPES.map(docType => {
-                const doc = normaliseDoc(docs[docType]);
-                const hasDoc = !!doc;
-                const statusVal = doc?.status;
+                const doc = resolveDoc(docType)
+                const hasDoc = !!doc
+                const statusVal = doc?.status
                 return (
                   <tr key={docType}>
+                    {/* Document Type */}
                     <td className="dt">{docType}</td>
+
+                    {/* Document ID */}
+                    <td>
+                      {doc?.documentId
+                        ? <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--g400)' }} title={doc.documentId}>{doc.documentId.slice(0, 14)}…</span>
+                        : <span className="nd">—</span>
+                      }
+                    </td>
+
+                    {/* File Name */}
                     <td>
                       {doc?.fileName
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g600)' }}>{doc.fileName}</span>
                         : hasDoc
-                          ? <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g400)' }}>{doc.id?.slice(0, 16)}…</span>
+                          ? <span style={{ fontSize: 11, color: 'var(--g400)' }}>—</span>
                           : <span className="nd">—</span>
                       }
                     </td>
+
+                    {/* Status */}
                     <td>
                       {hasDoc && statusVal
                         ? <span className={`badge ${docStatusBadgeClass(statusVal)}`}>{statusVal}</span>
@@ -324,11 +398,27 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
                           : <span className="nd">—</span>
                       }
                     </td>
+
+                    {/* Uploaded At */}
+                    <td style={{ fontSize: 11, color: 'var(--g400)', whiteSpace: 'nowrap' }}>
+                      {doc?.uploadedAt
+                        ? new Date(doc.uploadedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                        : <span className="nd">—</span>
+                      }
+                    </td>
+
+                    {/* Reviewed By */}
+                    <td style={{ fontSize: 11, color: 'var(--g500)' }}>
+                      {doc?.reviewedBy || <span className="nd">—</span>}
+                    </td>
+
+                    {/* Document link */}
                     <td>
                       {doc?.fileUrl
                         ? (
                           <button className="btn btn-sm" onClick={() => window.open(doc.fileUrl, '_blank')}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                            View
                           </button>
                         )
                         : hasDoc
@@ -337,6 +427,7 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
                       }
                     </td>
 
+                    {/* Review Actions */}
                     <td>
                       {hasDoc ? (
                         <div style={{ display: 'flex', gap: 5 }}>
@@ -360,14 +451,14 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
                       )}
                     </td>
                   </tr>
-                );
+                )
               })}
             </tbody>
           </table>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /* ── VEHICLES TAB ── */

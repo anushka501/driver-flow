@@ -17,9 +17,10 @@ function SortIcon({ col, sortCol, sortDir }) {
 function docVerifLabel(driver) {
   const docs = Object.values(driver.documents || {});
   if (!docs.length) return 'UNVERIFIED';
-  if (docs.every(d => d?.status === 'APPROVED')) return 'VERIFIED';
-  if (docs.some(d => d?.status === 'REJECTED')) return 'REJECTED';
-  if (docs.some(d => d?.status === 'PENDING' || d?.status === 'PENDING_VERIFICATION' || typeof d === 'string')) return 'PENDING';
+  // String value = raw doc ID from list API = uploaded but not yet reviewed → PENDING
+  if (docs.every(d => typeof d === 'object' && d?.status === 'APPROVED')) return 'VERIFIED';
+  if (docs.some(d => typeof d === 'object' && d?.status === 'REJECTED')) return 'REJECTED';
+  if (docs.some(d => typeof d === 'string' || d?.status === 'PENDING' || d?.status === 'PENDING_VERIFICATION')) return 'PENDING';
   return 'UNVERIFIED';
 }
 
@@ -247,13 +248,20 @@ function DriverRow({ driver, onView, onEdit, onDelete, onViewDocs, onViewVendor 
         style={{ cursor: 'pointer' }}
         onClick={e => { e.stopPropagation(); onViewDocs && onViewDocs(driver); }}
       >
-        <span style={{
-          fontSize: 11, fontFamily: 'var(--mono)',
-          color: driver.docCount > 0 ? 'var(--blue)' : 'var(--g400)',
-          fontWeight: driver.docCount > 0 ? 500 : 400,
-        }}>
-          {driver.docCount ?? 0}
-        </span>
+        {(() => {
+          const count = driver.docCount > 0
+            ? driver.docCount
+            : Object.keys(driver.documents || {}).length
+          return (
+            <span style={{
+              fontSize: 11, fontFamily: 'var(--mono)',
+              color: count > 0 ? 'var(--blue)' : 'var(--g400)',
+              fontWeight: count > 0 ? 500 : 400,
+            }}>
+              {count}
+            </span>
+          )
+        })()}
       </td>
 
       {/* Vendor */}

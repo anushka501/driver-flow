@@ -59,12 +59,16 @@ export function formatDate(dateStr) {
 // ── Tag helpers — tags is where phone/isActive/zeroCertified live ──
 
 export function getTag(driver, key, fallback = '') {
-  return driver?.tags?.[key] ?? fallback
+  const fromTags = driver?.tags?.[key]
+  if (fromTags !== undefined && fromTags !== null) return fromTags
+  const topLevel = driver?.[key]
+  if (topLevel !== undefined && topLevel !== null) return topLevel
+  return fallback
 }
 
 export function tagBool(driver, key) {
-  const v = getTag(driver, key, 'false')
-  return v === true || v === 'true'
+  const v = getTag(driver, key, false)
+  return v === true || v === 'true' || v === 1 || v === '1'
 }
 
 // Format updatedAt from API's epoch format

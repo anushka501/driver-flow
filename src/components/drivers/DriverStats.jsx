@@ -27,10 +27,10 @@ export default function DriverStats({ stats, activeFilter, onFilter }) {
 
       {/* Row 2: Doc review status — 4 cards */}
       <div className="stats-grid-2">
-        <StatCard label="Docs Verified"       value={docsVerified}      sub="Approved documents" valueColor="var(--green)"  active={activeFilter === 'DOCS_VERIFIED'}   onClick={() => onFilter && onFilter('DOCS_VERIFIED')} />
-        <StatCard label="Docs Pending Review" value={docsPendingReview}  sub="Awaiting review"    valueColor="var(--orange)" active={activeFilter === 'DOCS_PENDING'}    onClick={() => onFilter && onFilter('DOCS_PENDING')} />
-        <StatCard label="Docs Unverified"     value={docsUnverified}     sub="Not uploaded"       valueColor="var(--g400)"   active={activeFilter === 'DOCS_UNVERIFIED'} onClick={() => onFilter && onFilter('DOCS_UNVERIFIED')} />
-        <StatCard label="Docs Rejected"       value={docsRejected}       sub="Review required"    valueColor="var(--red)"    active={activeFilter === 'DOCS_REJECTED'}   onClick={() => onFilter && onFilter('DOCS_REJECTED')} />
+        <StatCard label="Docs Pending Review" value={docsPendingReview} sub="Has pending docs" valueColor="var(--green)"  active={activeFilter === 'DOCS_VERIFIED'}   onClick={() => onFilter && onFilter('DOCS_VERIFIED')} />
+        <StatCard label="Docs Unverified"     value={docsUnverified}   sub="No docs uploaded"    valueColor="var(--orange)" active={activeFilter === 'DOCS_PENDING'}    onClick={() => onFilter && onFilter('DOCS_PENDING')} />
+        <StatCard label="Docs Verified"       value={docsVerified}     sub="All docs approved"     sub="Not uploaded"       valueColor="var(--g400)"   active={activeFilter === 'DOCS_UNVERIFIED'} onClick={() => onFilter && onFilter('DOCS_UNVERIFIED')} />
+        <StatCard label="Docs Rejected"       value={docsRejected}     sub="Has rejected docs"     valueColor="var(--red)"    active={activeFilter === 'DOCS_REJECTED'}   onClick={() => onFilter && onFilter('DOCS_REJECTED')} />
       </div>
     </>
   );
