@@ -14,7 +14,7 @@ export function createDocument({ entityId, type, file, status = 'PENDING_VERIFIC
 
   return request('/documents', {
     method: 'POST',
-    body: JSON.stringify({
+    body:({
       entityId,
       extension,
       type,
@@ -58,7 +58,7 @@ export async function createAndUploadDocument({ entityId, type, file, reviewedBy
 export function reviewDocument(docId, status, reviewedBy = 'admin', reason = '') {
   return request(`/documents/review/${docId}`, {
     method: 'POST',
-    body: JSON.stringify(withoutEmptyValues({
+    body: (({
       status,
       reviewedBy,
       reason,
@@ -69,24 +69,7 @@ export function reviewDocument(docId, status, reviewedBy = 'admin', reason = '')
 // GET /documents?entityId=<driverId> — fetch all doc records for a driver
 // Tries multiple path shapes to handle API variation
 export async function getDocuments(entityId) {
-  const paths = [
-    `/documents?entityId=${encodeURIComponent(entityId)}`,
-    `/documents/entity/${encodeURIComponent(entityId)}`,
-    `/documents/${encodeURIComponent(entityId)}`,
-  ]
-
-  let lastError
-  for (const path of paths) {
-    try {
-      const data = await request(path)
-      if (data !== null && data !== undefined) return data
-    } catch (err) {
-      lastError = err
-      console.warn('getDocuments failed:', path, err.message)
-    }
-  }
-
-  throw lastError
+  return request(`/documents?entityId=${encodeURIComponent(entityId)}`)
 }
 
 // Normalize any shape the documents API returns into a { [TYPE]: docObject } map

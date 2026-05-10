@@ -3,7 +3,6 @@ import Avatar from '../shared/Avatar';
 import { Icons } from '../../assets/icons';
 import { statusBadgeClass, statusDotClass, statusLabel, docStatusBadgeClass } from '../../utils/helpers'
 
-// ── Sort helpers ──────────────────────────────────────────────────────────────
 function SortIcon({ col, sortCol, sortDir }) {
   const active = sortCol === col;
   return (
@@ -17,7 +16,6 @@ function SortIcon({ col, sortCol, sortDir }) {
 function docVerifLabel(driver) {
   const docs = Object.values(driver.documents || {});
   if (!docs.length) return 'UNVERIFIED';
-  // String value = raw doc ID from list API = uploaded but not yet reviewed → PENDING
   if (docs.every(d => typeof d === 'object' && d?.status === 'APPROVED')) return 'VERIFIED';
   if (docs.some(d => typeof d === 'object' && d?.status === 'REJECTED')) return 'REJECTED';
   if (docs.some(d => typeof d === 'string' || d?.status === 'PENDING' || d?.status === 'PENDING_VERIFICATION')) return 'PENDING';
@@ -39,13 +37,11 @@ export default function DriverTable({
 
   const vendors = [...new Set(drivers.map(d => d.vendor).filter(Boolean))];
 
-  // ── Toggle sort ──
   function handleSort(col) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(col); setSortDir('asc'); }
   }
 
-  // ── Filter + sort ──
   const filtered = useMemo(() => {
     let rows = drivers.filter(d => {
       const q = search.toLowerCase();
@@ -55,12 +51,11 @@ export default function DriverTable({
       const matchStatus = !statusFilter || statusFilter === 'all' || d.status === statusFilter;
       const matchVendor = !vendorFilter || vendorFilter === 'all' || d.vendor === vendorFilter;
 
-      // Stat-card filter
       let matchStat = true;
-      if (statFilter === 'VERIFIED')        matchStat = d.status === 'VERIFIED';
-      else if (statFilter === 'POLICE_VERIFIED') matchStat = !!d.policeVerified;
-      else if (statFilter === 'UNVERIFIED') matchStat = d.status === 'UNVERIFIED';
-      else if (statFilter === 'ZERO_CERTIFIED') matchStat = !!d.zeroCertified;
+      if (statFilter === 'VERIFIED')             matchStat = d.status === 'VERIFIED';
+      else if (statFilter === 'POLICE_VERIFIED')  matchStat = !!d.policeVerified;
+      else if (statFilter === 'UNVERIFIED')       matchStat = d.status === 'UNVERIFIED';
+      else if (statFilter === 'ZERO_CERTIFIED')   matchStat = !!d.zeroCertified;
       else if (statFilter === 'DOCS_VERIFIED') {
         const docs = Object.values(d.documents || {});
         matchStat = docs.length > 0 && docs.every(doc => doc?.status === 'APPROVED');
@@ -78,13 +73,15 @@ export default function DriverTable({
     if (sortCol) {
       rows = [...rows].sort((a, b) => {
         let va, vb;
-        if (sortCol === 'id')        { va = a.id || '';         vb = b.id || ''; }
-        if (sortCol === 'name')      { va = a.name || '';       vb = b.name || ''; }
-        if (sortCol === 'status')    { va = STATUS_ORDER[a.status] ?? 99;      vb = STATUS_ORDER[b.status] ?? 99; return sortDir === 'asc' ? va - vb : vb - va; }
-        if (sortCol === 'docVerif')  { va = DOC_STATUS_ORDER[docVerifLabel(a)] ?? 99; vb = DOC_STATUS_ORDER[docVerifLabel(b)] ?? 99; return sortDir === 'asc' ? va - vb : vb - va; }
-        if (sortCol === 'vehicle')   { va = a.vehiclePlate || ''; vb = b.vehiclePlate || ''; }
-        if (sortCol === 'lastUpd')   { va = a.lastUpdated || ''; vb = b.lastUpdated || ''; }
-
+        if (sortCol === 'id')       { va = a.id || '';    vb = b.id || ''; }
+        if (sortCol === 'name')     { va = a.name || '';  vb = b.name || ''; }
+        if (sortCol === 'status')   { va = STATUS_ORDER[a.status] ?? 99;             vb = STATUS_ORDER[b.status] ?? 99;             return sortDir === 'asc' ? va - vb : vb - va; }
+        if (sortCol === 'docVerif') { va = DOC_STATUS_ORDER[docVerifLabel(a)] ?? 99; vb = DOC_STATUS_ORDER[docVerifLabel(b)] ?? 99; return sortDir === 'asc' ? va - vb : vb - va; }
+        if (sortCol === 'lastUpd') {
+          va = a.updatedAt?.epochSeconds || 0
+          vb = b.updatedAt?.epochSeconds || 0
+          return sortDir === 'asc' ? va - vb : vb - va  // ← early return, no fall-through
+        }
         if (typeof va === 'string') {
           return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
         }
@@ -150,9 +147,6 @@ export default function DriverTable({
               <th {...thProps('docVerif')}>
                 Doc Verification <SortIcon col="docVerif" sortCol={sortCol} sortDir={sortDir} />
               </th>
-              <th {...thProps('vehicle')}>
-                Vehicle <SortIcon col="vehicle" sortCol={sortCol} sortDir={sortDir} />
-              </th>
               <th {...thProps('lastUpd')}>
                 Last Updated <SortIcon col="lastUpd" sortCol={sortCol} sortDir={sortDir} />
               </th>
@@ -164,7 +158,7 @@ export default function DriverTable({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--g400)', fontSize: 12 }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--g400)', fontSize: 12 }}>
                   No drivers found
                 </td>
               </tr>
@@ -229,18 +223,24 @@ function DriverRow({ driver, onView, onEdit, onDelete, onViewDocs, onViewVendor 
       >
         <span className={`badge ${dvClass}`}>{dvLabel}</span>
       </td>
-      {/* Vehicle */}
-      <td onClick={e => e.stopPropagation()}>
-        {driver.vehiclePlate ? (
-          <span className="plate-chip">{driver.vehiclePlate}</span>
-        ) : (
-          <span style={{ color: 'var(--g300)', fontSize: 11, fontFamily: 'var(--mono)' }}>—</span>
-        )}
-      </td>
 
       {/* Last Updated */}
       <td style={{ fontSize: 11, color: 'var(--g400)' }}>
-        {driver.lastUpdated || '—'}
+        {(() => {
+          const epoch = driver.updatedAt?.epochSeconds || driver.lastUpdated
+          if (!epoch) return '—'
+          const date = new Date(epoch * 1000)
+          return (
+            <div>
+              <div style={{ color: 'var(--g700)', fontWeight: 500 }}>
+                {date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </div>
+              <div style={{ color: 'var(--g400)', fontSize: 10, marginTop: 1 }}>
+                {date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+              </div>
+            </div>
+          )
+        })()}
       </td>
 
       {/* Doc Count */}
@@ -265,7 +265,7 @@ function DriverRow({ driver, onView, onEdit, onDelete, onViewDocs, onViewVendor 
       </td>
 
       {/* Vendor */}
-      <td onClick={e => { e.stopPropagation(); onViewVendor && onViewVendor(driver.vendor); }}>
+      <td onClick={e => { e.stopPropagation(); onViewVendor && onViewVendor({ id: driver.vendorId, name: driver.vendor }); }}>
         <span className="badge badge-gray" style={{ cursor: 'pointer' }}>{driver.vendor || '—'}</span>
       </td>
 

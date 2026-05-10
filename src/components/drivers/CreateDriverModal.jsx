@@ -1,24 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import Modal from '../shared/Modal'
+import { createUser } from '../../api/users'
 import { createDriver } from '../../api/drivers'
 import { searchVendors } from '../../api/vendors'
 import { getTag } from '../../utils/helpers'
 
 function normalizeVendors(data) {
-  // /vendors/search returns { total: N, vendors: [...] }
-  // Each vendor has at minimum: id, name
   let rows
-
   if (Array.isArray(data)) {
     rows = data
   } else if (data && typeof data === 'object') {
     const listKey = ['vendors', 'vendorList', 'items', 'Items', 'results', 'data', 'content']
       .find(k => Array.isArray(data[k]))
-
     if (listKey) {
       rows = data[listKey]
     } else {
-      // Plain object map: { "V001": { name: "Acme" }, ... }
       rows = Object.entries(data).map(([key, val]) => {
         if (val && typeof val === 'object') return { id: key, ...val }
         if (typeof val === 'string')        return { id: key, name: val }
@@ -32,26 +28,9 @@ function normalizeVendors(data) {
   const normalized = rows
     .map(vendor => {
       if (typeof vendor === 'string') return { id: vendor, label: vendor }
-
-      const id =
-        vendor?.id         ||
-        vendor?.vendorId   ||
-        vendor?.vendor_id  ||
-        vendor?.pk         ||
-        vendor?.PK         ||
-        ''
-
-      const name =
-        vendor?.name        ||
-        vendor?.vendorName  ||
-        vendor?.displayName ||
-        vendor?.companyName ||
-        vendor?.legalName   ||
-        ''
-
+      const id = vendor?.id || vendor?.vendorId || vendor?.vendor_id || ''
+      const name = vendor?.name || vendor?.vendorName || vendor?.displayName || ''
       if (!id) return null
-
-      // Show name only — fall back to id if name is missing
       return { id, label: name || id }
     })
     .filter(Boolean)
@@ -60,65 +39,57 @@ function normalizeVendors(data) {
 }
 
 export default function CreateDriverModal({ open, onClose, onDriverCreated, existingDrivers = [] }) {
-  const [submitting, setSubmitting] = useState(false)
-  const [showUserSearch, setShowUserSearch] = useState(false)
-  const [selectedUser, setSelectedUser] = useState(null)
-  const [vendors, setVendors] = useState([])
+  const [submitting, setSubmitting]         = useState(false)
+  const [submitStep, setSubmitStep]         = useState('')
+  const [vendors, setVendors]               = useState([])
   const [vendorsLoading, setVendorsLoading] = useState(false)
-  const [vendorsError, setVendorsError] = useState('')
+  const [vendorsError, setVendorsError]     = useState('')
 
   const [form, setForm] = useState({
-    userId: '', phone: '', email: '',
-    licenseNo: '', vendor: '', isActive: true,
-    firstName: '', lastName: '',
+    phone:      '',
+    firstName:  '',
+    lastName:   '',
+    gender:     '',
+    vendor:     '',
+    autoVerify: true,
   })
-
-  const vendorOptions = vendors
 
   useEffect(() => {
     if (!open) return
-
     let cancelled = false
     setVendorsLoading(true)
     setVendorsError('')
-
     searchVendors({ query: '*' })
       .then(data => {
-        if (cancelled) return
-        const normalized = normalizeVendors(data)
-        console.log('VENDORS RESPONSE:', data, normalized)
-        setVendors(normalized)
+        if (!cancelled) {
+          const list = normalizeVendors(data)
+          setVendors(list)
+          const defaultVendor = list.find(v =>
+            v.label?.toUpperCase() === 'SAMPLE1234'
+          ) || list[0]
+          if (defaultVendor) {
+            setForm(prev => ({ ...prev, vendor: defaultVendor.id }))
+          }
+        }
       })
-      .catch(err => {
-        if (cancelled) return
-        setVendors([])
-        setVendorsError(err.message || 'Failed to load vendors')
-      })
-      .finally(() => {
-        if (!cancelled) setVendorsLoading(false)
-      })
-
+      .catch(err => { if (!cancelled) { setVendors([]); setVendorsError(err.message) } })
+      .finally(() => { if (!cancelled) setVendorsLoading(false) })
     return () => { cancelled = true }
   }, [open])
 
-  function currentUserId() {
-    return (selectedUser?.id || form.userId).trim()
-  }
-
   function handleClose() {
     setSubmitting(false)
-    setShowUserSearch(false)
-    setSelectedUser(null)
-    setForm({
-      userId: '', firstName: '', lastName: '', phone: '', email: '',
-      licenseNo: '', vendor: '', isActive: true,
-    })
+    setSubmitStep('')
+    setForm({ phone: '', firstName: '', lastName: '', gender: '', vendor: '', autoVerify: true })
     onClose()
   }
 
   function validateForm() {
-    if (!currentUserId())        { alert('Existing User ID is required.'); return false }
-    if (!form.phone.trim())      { alert('Phone is required.');            return false }
+    if (!form.phone.trim())     { alert('Phone is required.');       return false }
+    if (!form.firstName.trim()) { alert('Given name is required.');  return false }
+    if (!form.lastName.trim())  { alert('Family name is required.'); return false }
+    if (!form.gender)           { alert('Gender is required.');      return false }
+    if (!form.vendor)           { alert('Please select a vendor.');  return false }
     return true
   }
 
@@ -133,7 +104,6 @@ export default function CreateDriverModal({ open, onClose, onDriverCreated, exis
 
   async function handleSubmit() {
     if (!validateForm()) return
-
     const duplicate = duplicatePhoneExists()
     if (duplicate) {
       alert(`Phone ${form.phone} is already registered to ${duplicate.name || duplicate.id}`)
@@ -142,20 +112,43 @@ export default function CreateDriverModal({ open, onClose, onDriverCreated, exis
 
     setSubmitting(true)
     try {
-      const result = await createDriver({
-        id:           currentUserId(),
-        phone:        form.phone,
-        vendorId:     form.vendor       || '',
-        licensePlate: form.licenseNo    || '',
-        driverType:   'ADHOC',
-        isActive:     form.isActive,
+      setSubmitStep('Creating user account...')
+      let userResult
+      try {
+        userResult = await createUser({
+          phone:      form.phone,
+          firstName:  form.firstName,
+          lastName:   form.lastName,
+          gender:     form.gender,
+          autoVerify: form.autoVerify,
+        })
+      } catch (err) {
+        if (err.message?.toLowerCase().includes('already exists')) {
+          throw new Error(`A user with phone +91${form.phone.replace(/\D/g, '')} already exists in the system.`)
+        }
+        throw err
+      }
+
+      const driverId = userResult?.username || userResult?.id || userResult?.userId
+      if (!driverId) {
+        throw new Error(`User was created but no username was returned. Raw response: ${JSON.stringify(userResult)}`)
+      }
+
+      setSubmitStep('Registering as driver...')
+      const driverResult = await createDriver({
+        id:       driverId,
+        vendorId: form.vendor,
+        phone:    form.phone,
       })
+
       handleClose()
-      onDriverCreated && onDriverCreated(result)
+      onDriverCreated && onDriverCreated(driverResult ?? { id: driverId })
+
     } catch (err) {
-      alert('Failed to create driver: ' + err.message)
+      alert('Failed: ' + err.message)
     } finally {
       setSubmitting(false)
+      setSubmitStep('')
     }
   }
 
@@ -163,125 +156,109 @@ export default function CreateDriverModal({ open, onClose, onDriverCreated, exis
     <Modal open={open} onClose={handleClose} title="Create Driver">
       <div style={{ padding: 20 }}>
 
-        {/* User ID */}
+        {/* Phone */}
         <div style={{ marginBottom: 16 }}>
-          <label className="lbl">Existing User ID <span className="lbl-req">*</span></label>
+          <label className="lbl">Phone <span className="lbl-req">*</span></label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+            <span style={{ padding: '0 10px', height: 32, display: 'flex', alignItems: 'center', background: 'var(--g100)', border: '1px solid var(--g200)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--g600)', fontFamily: 'var(--mono)' }}>
+              +91
+            </span>
             <input
               className="inp"
-              placeholder="ZDR000001"
-              value={selectedUser?.id || form.userId}
-              onChange={e => {
-                setSelectedUser(null)
-                setForm({ ...form, userId: e.target.value })
-              }}
+              placeholder="98765 43210"
+              value={form.phone}
+              onChange={e => setForm({ ...form, phone: e.target.value })}
               style={{ flex: 1, fontFamily: 'var(--mono)' }}
             />
-            <button className="btn btn-sm" onClick={() => setShowUserSearch(!showUserSearch)}>
-              {showUserSearch ? 'Cancel' : 'Use ID'}
-            </button>
           </div>
-
-          {showUserSearch && (
-            <UserSearchPanel
-              onSelect={user => {
-                setSelectedUser(user)
-                setForm({ ...form, userId: user.id })
-                setShowUserSearch(false)
-              }}
-            />
-          )}
-
-          {selectedUser && (
-            <div style={{ marginTop: 8, padding: '6px 10px', background: 'var(--gl)', border: '1px solid var(--gb)', borderRadius: 'var(--r)', fontSize: 11, color: 'var(--green)' }}>
-              ✓ Linked: {selectedUser.name} · {selectedUser.id}
-            </div>
-          )}
         </div>
 
-        {/* Form fields */}
-        <div className="fg fg-2">
+        {/* Given Name + Family Name */}
+        <div className="fg fg-2" style={{ marginBottom: 16 }}>
           <div className="field">
-            <label className="lbl">Phone <span className="lbl-req">*</span></label>
-            <input className="inp" placeholder="+91 99999 99999" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+            <label className="lbl">Given Name <span className="lbl-req">*</span></label>
+            <input
+              className="inp"
+              placeholder="Enter given name"
+              value={form.firstName}
+              onChange={e => setForm({ ...form, firstName: e.target.value })}
+            />
           </div>
           <div className="field">
-            <label className="lbl">Email</label>
-            <input className="inp" type="email" placeholder="driver@example.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            <label className="lbl">Family Name <span className="lbl-req">*</span></label>
+            <input
+              className="inp"
+              placeholder="Enter family name"
+              value={form.lastName}
+              onChange={e => setForm({ ...form, lastName: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* Gender + Vendor */}
+        <div className="fg fg-2" style={{ marginBottom: 16 }}>
+          <div className="field">
+            <label className="lbl">Gender <span className="lbl-req">*</span></label>
+            <select
+              className="inp"
+              value={form.gender}
+              onChange={e => setForm({ ...form, gender: e.target.value })}
+            >
+              <option value="">Select gender</option>
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+              <option value="NA">Other / Prefer not to say</option>
+            </select>
           </div>
           <div className="field">
-            <label className="lbl">License Number</label>
-            <input className="inp" placeholder="DL-XXXXXXXXXXXX" value={form.licenseNo} onChange={e => setForm({ ...form, licenseNo: e.target.value })} />
-          </div>
-          <div className="field">
-            <label className="lbl">Vendor</label>
+            <label className="lbl">Vendor <span className="lbl-req">*</span></label>
             <select
               className="inp"
               value={form.vendor}
               onChange={e => setForm({ ...form, vendor: e.target.value })}
               disabled={vendorsLoading}
             >
-              <option value="">
-                {vendorsLoading ? 'Loading vendors...' : vendorOptions.length ? 'No vendor' : 'No vendors found'}
-              </option>
-              {vendorOptions.map(vendor => (
-                <option key={vendor.id} value={vendor.id}>{vendor.label}</option>
-              ))}
+              {vendorsLoading
+                ? <option value="">Loading vendors...</option>
+                : vendors.map(v => <option key={v.id} value={v.id}>{v.label}</option>)
+              }
             </select>
             {vendorsError && (
-              <div style={{ marginTop: 5, fontSize: 11, color: 'var(--orange)' }}>
-                {vendorsError}
-              </div>
+              <div style={{ marginTop: 5, fontSize: 11, color: 'var(--orange)' }}>{vendorsError}</div>
             )}
           </div>
         </div>
 
-        {/* Active toggle */}
+        {/* Auto Verify */}
         <div style={{ marginBottom: 16 }}>
-          <label className="lbl" style={{ display: 'block', marginBottom: 8 }}>Driver Active</label>
+          <label className="lbl" style={{ display: 'block', marginBottom: 8 }}>Auto Verify</label>
           <div className="toggle-wrap">
-            <button className={`toggle${form.isActive ? '' : ' off'}`} onClick={() => setForm({ ...form, isActive: !form.isActive })}>
+            <button
+              className={`toggle${form.autoVerify ? '' : ' off'}`}
+              onClick={() => setForm({ ...form, autoVerify: !form.autoVerify })}
+            >
               <div className="toggle-knob" />
             </button>
-            <span style={{ fontSize: 12, fontWeight: 500, color: form.isActive ? 'var(--blue)' : 'var(--g400)' }}>
-              {form.isActive ? 'Active' : 'Inactive'}
+            <span style={{ fontSize: 12, fontWeight: 500, color: form.autoVerify ? 'var(--blue)' : 'var(--g400)' }}>
+              {form.autoVerify ? 'Yes' : 'No'}
             </span>
           </div>
         </div>
 
+        {/* Progress indicator */}
+        {submitting && submitStep && (
+          <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--bl)', border: '1px solid var(--bb)', borderRadius: 'var(--r)', fontSize: 12, color: 'var(--blue)' }}>
+            ⏳ {submitStep}
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 12, borderTop: '1px solid var(--g100)' }}>
-          <button className="btn" onClick={handleClose}>Cancel</button>
+          <button className="btn" onClick={handleClose} disabled={submitting}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={submitting}>
             {submitting ? 'Creating...' : 'Create Driver'}
           </button>
         </div>
       </div>
     </Modal>
-  )
-}
-
-function UserSearchPanel({ onSelect }) {
-  const [query, setQuery] = useState('')
-
-  return (
-    <div style={{ marginTop: 8, background: 'var(--g50)', border: '1px solid var(--g200)', borderRadius: 'var(--r)', overflow: 'hidden' }}>
-      <div style={{ padding: 12 }}>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <input
-            className="inp"
-            placeholder="Paste existing user ID e.g. ZDR000001"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            style={{ flex: 1, fontFamily: 'var(--mono)' }}
-          />
-          <button
-            className="btn btn-sm"
-            onClick={() => query.trim() && onSelect({ id: query.trim(), name: query.trim() })}
-          >
-            Link
-          </button>
-        </div>
-      </div>
-    </div>
   )
 }

@@ -6,9 +6,10 @@ function withoutEmptyValues(obj) {
   )
 }
 
-// GET /drivers/search?query=* — the working list endpoint
-export function getDrivers(query = '*') {
-  return request(`/drivers/search?query=${encodeURIComponent(query)}`)
+// GET /drivers/search?query=* — supports pagination via nextToken
+export function getDrivers(query = '*', limit = 1000, offset = 0) {
+  const params = new URLSearchParams({ query, limit, offset })
+  return request(`/drivers/search?${params.toString()}`)
 }
 
 // GET /drivers/:id
@@ -20,35 +21,36 @@ export function getDriver(id) {
 export function createDriver(data) {
   const id = (data.id || '').trim()
 
-  if (!id) {
-    throw new Error('Existing User ID is required.')
-  }
-
+  if (!id) throw new Error('Existing User ID is required.')
   if (!/^Z[A-Z]{2}[0-9]{5,10}$/.test(id)) {
     throw new Error('User ID must match the format ZDR000001.')
   }
 
-  const body = withoutEmptyValues({
+  const body = {
     id,
-    status: 'UNVERIFIED',
-    vendorId: (data.vendorId || '').trim(),
+    status:   'UNVERIFIED',
+    vendorId: (data.vendorId && data.vendorId.trim()) ? data.vendorId.trim() : null,
     documents: {},
-    homeLocation: {},
+    homeLocation: {
+      lat: 0,
+      lng: 0,
+    },
     preferredAreas: {},
     referrer: '',
     tags: withoutEmptyValues({
-      licensePlate: (data.licensePlate || '').trim(),
-      driverType: data.driverType || 'ADHOC',
-      phone: (data.phone || '').trim(),
-      isActive: data.isActive === false ? 'false' : 'true',
-      zeroCertified: 'false',
+      phone:             (data.phone || '').trim() || undefined,
+      driverType:        data.driverType || 'ADHOC',
+      isActive:          'true',
+      zeroCertified:     'false',
       pushNotifications: 'true',
     }),
-  })
+  }
+
+  console.log('createDriver body:', JSON.stringify(body, null, 2))
 
   return request('/drivers', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body,
   })
 }
 
@@ -56,11 +58,11 @@ export function createDriver(data) {
 export function updateDriver(id, fields) {
   return request(`/drivers/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({
-      vendorId:  fields.vendorId  ?? '',
+    body: {
+      vendorId:  fields.vendorId  ?? null,
       status:    fields.status    ?? 'UNVERIFIED',
       documents: fields.documents ?? {},
       tags:      fields.tags      ?? {},
-    }),
+    },
   })
 }

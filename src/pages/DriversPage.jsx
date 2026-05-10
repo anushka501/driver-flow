@@ -15,13 +15,18 @@ import { createAndUploadDocument, reviewDocument } from '../api/documents'
 import { tagBool } from '../utils/helpers'
 import '../components/drivers/CreateDriverModal.css'
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
+
 export default function DriversPage() {
   const { showToast } = useToast()
   const { logout } = useAuth()
 
-  const [drivers, setDrivers]                     = useState([])
+  const [allDrivers, setAllDrivers]               = useState([])   // full list from API
   const [loading, setLoading]                     = useState(true)
   const [error, setError]                         = useState(null)
+  const [currentPage, setCurrentPage]             = useState(1)
+  const [pageSize, setPageSize]                   = useState(10)
+  const [vendorMap, setVendorMap]                 = useState({})
   const [selectedDriver, setSelectedDriver]       = useState(null)
   const [activeTabOverride, setActiveTabOverride] = useState(null)
   const [createOpen, setCreateOpen]               = useState(false)
@@ -29,31 +34,30 @@ export default function DriversPage() {
   const [vendorModal, setVendorModal]             = useState({ open: false, id: null, name: null })
   const [statusFilter, setStatusFilter]           = useState(null)
 
-  // ── Fetch drivers + vendors in parallel ─────────────────
+  // ── Fetch ALL drivers once ───────────────────────────────
   const fetchDrivers = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const [driverData, vendorData] = await Promise.all([
-        getDrivers('*'),
+        getDrivers('*', 1000, 0),
         searchVendors({ query: '*' }).catch(() => ({ vendors: [] })),
       ])
 
-      // Build vendorId → name lookup map
       const vendorList = Array.isArray(vendorData) ? vendorData : (vendorData?.vendors ?? [])
-      const vendorMap = {}
-      vendorList.forEach(v => { if (v?.id) vendorMap[v.id] = v.name || v.id })
+      const map = {}
+      vendorList.forEach(v => { if (v?.id) map[v.id] = v.name || v.id })
+      setVendorMap(map)
 
-      // API returns { drivers: [...] }
-      const list = Array.isArray(driverData) ? driverData : (driverData?.drivers ?? [])
-
-      // Enrich each driver with resolved vendor name
+      const list = driverData?.drivers ?? []
       const enriched = list.map(d => ({
         ...d,
-        vendor:     vendorMap[d.vendorId] || d.vendorName || d.vendor || d.vendorId || '',
-        vendorName: vendorMap[d.vendorId] || d.vendorName || '',
+        vendor:     map[d.vendorId] || d.vendorName || d.vendor || d.vendorId || '',
+        vendorName: map[d.vendorId] || d.vendorName || '',
       }))
-      setDrivers(enriched)
+
+      setAllDrivers(enriched)
+      setCurrentPage(1)
     } catch (err) {
       setError(err.message)
       showToast('Failed to load', err.message)
@@ -64,33 +68,70 @@ export default function DriversPage() {
 
   useEffect(() => { fetchDrivers() }, [fetchDrivers])
 
-  // ── Stats — computed from real data ─────────────────────
-  const stats = {
-    total:          drivers.length,
-    verified:       drivers.filter(d => d.status === 'VERIFIED').length,
-    policeVerified: drivers.filter(d => d.status === 'POLICE_VERIFIED' || tagBool(d, 'policeVerified')).length,
-    unverified:     drivers.filter(d => d.status === 'UNVERIFIED').length,
-    zeroCertified:  drivers.filter(d => tagBool(d, 'zeroCertified')).length,
+  // ── Filtered + paginated drivers ─────────────────────────
+  function getFilteredDrivers() {
+    let filtered = allDrivers
+    if (statusFilter === 'ZERO_CERTIFIED')
+      filtered = allDrivers.filter(d => tagBool(d, 'zeroCertified'))
+    else if (statusFilter === 'POLICE_VERIFIED')
+      filtered = allDrivers.filter(d => d.status === 'POLICE_VERIFIED' || tagBool(d, 'policeVerified'))
+    else if (statusFilter === 'DOCS_VERIFIED')
+      filtered = allDrivers.filter(d => {
+        const docs = Object.values(d.documents || {})
+        return docs.length > 0 && docs.every(doc => typeof doc === 'object' && doc?.status === 'APPROVED')
+      })
+    else if (statusFilter === 'DOCS_PENDING')
+      filtered = allDrivers.filter(d =>
+        Object.values(d.documents || {}).some(doc => {
+          if (typeof doc === 'string') return true
+          return doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION'
+        })
+      )
+    else if (statusFilter === 'DOCS_UNVERIFIED')
+      filtered = allDrivers.filter(d =>
+        Object.keys(d.documents || {}).length === 0 && (d.docCount ?? 0) === 0
+      )
+    else if (statusFilter === 'DOCS_REJECTED')
+      filtered = allDrivers.filter(d =>
+        Object.values(d.documents || {}).some(doc =>
+          typeof doc === 'object' && doc?.status === 'REJECTED'
+        )
+      )
+    else if (statusFilter)
+      filtered = allDrivers.filter(d => d.status === statusFilter)
 
-    // documents from the list API are doc-ID strings (no .status).
-    // A string value = uploaded/pending. An object with status = reviewed.
-    docsVerified: drivers.filter(d => {
+    const total = filtered.length
+    const pages = Math.ceil(total / pageSize)
+    const safePage = Math.min(currentPage, pages || 1)
+    const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
+    return { paged, total, pages }
+  }
+
+  // ── Stats (always from full list) ────────────────────────
+  const stats = {
+    total:          allDrivers.length,
+    verified:       allDrivers.filter(d => d.status === 'VERIFIED').length,
+    policeVerified: allDrivers.filter(d => d.status === 'POLICE_VERIFIED' || tagBool(d, 'policeVerified')).length,
+    unverified:     allDrivers.filter(d => d.status === 'UNVERIFIED').length,
+    zeroCertified:  allDrivers.filter(d => tagBool(d, 'zeroCertified')).length,
+
+    docsVerified: allDrivers.filter(d => {
       const docs = Object.values(d.documents || {})
       return docs.length > 0 && docs.every(doc => typeof doc === 'object' && doc?.status === 'APPROVED')
     }).length,
 
-    docsPendingReview: drivers.filter(d =>
+    docsPendingReview: allDrivers.filter(d =>
       Object.values(d.documents || {}).some(doc => {
-        if (typeof doc === 'string') return true  // raw doc ID = pending upload
+        if (typeof doc === 'string') return true
         return doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION'
       })
     ).length,
 
-    docsUnverified: drivers.filter(d =>
+    docsUnverified: allDrivers.filter(d =>
       Object.keys(d.documents || {}).length === 0 && (d.docCount ?? 0) === 0
     ).length,
 
-    docsRejected: drivers.filter(d =>
+    docsRejected: allDrivers.filter(d =>
       Object.values(d.documents || {}).some(doc =>
         typeof doc === 'object' && doc?.status === 'REJECTED'
       )
@@ -113,20 +154,20 @@ export default function DriversPage() {
     setActiveTabOverride(null)
   }
 
-  // ── Called after successful POST ─────────────────────────
-  function handleDriverCreated(newDriver) {
-    setDrivers(prev => [newDriver, ...prev])
-    showToast('Driver created', `${newDriver.id} added successfully.`)
+  async function handleDriverCreated(result) {
+    const id = result?.id || result?.userId || result?.driverId || ''
+    showToast('Driver created', `${id ? id + ' added' : 'Driver added'} successfully.`)
+    await fetchDrivers()
   }
 
-  // ── Update driver (toggles, status) ─────────────────────
+  // ── Update driver ────────────────────────────────────────
   async function handleUpdateDriver(driverId, fields) {
-    const current = drivers.find(d => d.id === driverId)
+    const current = allDrivers.find(d => d.id === driverId)
     if (!current) return
 
     const updatedTags = { ...(current.tags || {}), ...(fields.tags || {}) }
     const payload = {
-      vendorId:  fields.vendorId  ?? current.vendorId  ?? '',
+      vendorId:  fields.vendorId  ?? current.vendorId  ?? null,
       status:    fields.status    ?? current.status    ?? 'UNVERIFIED',
       documents: fields.documents ?? current.documents ?? {},
       tags:      updatedTags,
@@ -146,10 +187,7 @@ export default function DriversPage() {
   async function handleApproveDoc(driver, docType) {
     const doc = driver.documents?.[docType]
     const docId = typeof doc === 'string' ? doc : (doc?.documentId || doc?.id)
-    if (!docId) {
-      showToast('Cannot review', 'Document has no ID yet.')
-      return
-    }
+    if (!docId) { showToast('Cannot review', 'Document has no ID yet.'); return }
     try {
       await reviewDocument(docId, 'APPROVED')
       patchDoc(driver.id, docType, 'APPROVED')
@@ -162,10 +200,7 @@ export default function DriversPage() {
   async function handleRejectDoc(driver, docType) {
     const doc = driver.documents?.[docType]
     const docId = typeof doc === 'string' ? doc : (doc?.documentId || doc?.id)
-    if (!docId) {
-      showToast('Cannot review', 'Document has no ID yet.')
-      return
-    }
+    if (!docId) { showToast('Cannot review', 'Document has no ID yet.'); return }
     try {
       await reviewDocument(docId, 'REJECTED')
       patchDoc(driver.id, docType, 'REJECTED')
@@ -183,12 +218,7 @@ export default function DriversPage() {
 
   async function handleAssignDocument({ driver, type, file }) {
     try {
-      const result = await createAndUploadDocument({
-        entityId: driver.id,
-        type,
-        file,
-      })
-
+      const result = await createAndUploadDocument({ entityId: driver.id, type, file })
       patchDoc(driver.id, type, 'PENDING_VERIFICATION', {
         id: result.documentId,
         documentId: result.documentId,
@@ -196,7 +226,6 @@ export default function DriversPage() {
         fileUrl: result.preSignedUrl?.split('?')[0],
         type,
       })
-
       await refreshDriver(driver.id).catch(() => null)
       showToast('Document assigned', `${type} uploaded successfully.`)
     } catch (err) {
@@ -207,7 +236,7 @@ export default function DriversPage() {
 
   // ── Local state patchers ─────────────────────────────────
   function patchDriver(driverId, updated) {
-    setDrivers(prev => prev.map(d => d.id === driverId ? { ...d, ...updated } : d))
+    setAllDrivers(prev => prev.map(d => d.id === driverId ? { ...d, ...updated } : d))
     setSelectedDriver(prev => prev?.id === driverId ? { ...prev, ...updated } : prev)
   }
 
@@ -225,8 +254,74 @@ export default function DriversPage() {
         },
       },
     })
-    setDrivers(prev => prev.map(d => d.id === driverId ? apply(d) : d))
+    setAllDrivers(prev => prev.map(d => d.id === driverId ? apply(d) : d))
     setSelectedDriver(prev => prev?.id === driverId ? apply(prev) : prev)
+  }
+
+  // ── Pagination renderer ──────────────────────────────────
+  function renderPagination(total, pages) {
+    if (pages <= 1) return null
+    const delta = 2
+    const pageNums = []
+
+    for (let i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || (i >= currentPage - delta && i <= currentPage + delta)) {
+        pageNums.push(i)
+      } else if (pageNums[pageNums.length - 1] !== '...') {
+        pageNums.push('...')
+      }
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 4px', marginTop: 8 }}>
+        {/* Left: item count */}
+        <div style={{ fontSize: 12, color: 'var(--g400)' }}>
+          {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, total)} of {total} drivers
+        </div>
+
+        {/* Center: page buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            className="btn btn-sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            style={{ padding: '0 8px', minWidth: 28 }}
+          >‹</button>
+
+          {pageNums.map((p, i) =>
+            p === '...'
+              ? <span key={`e${i}`} style={{ padding: '0 6px', fontSize: 12, color: 'var(--g400)' }}>…</span>
+              : <button
+                  key={p}
+                  className={`btn btn-sm${p === currentPage ? ' btn-primary' : ''}`}
+                  onClick={() => setCurrentPage(p)}
+                  style={{ padding: '0 8px', minWidth: 28 }}
+                >{p}</button>
+          )}
+
+          <button
+            className="btn btn-sm"
+            onClick={() => setCurrentPage(p => Math.min(pages, p + 1))}
+            disabled={currentPage === pages}
+            style={{ padding: '0 8px', minWidth: 28 }}
+          >›</button>
+        </div>
+
+        {/* Right: page size selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--g400)' }}>
+          <span>Show</span>
+          <select
+            className="inp"
+            value={pageSize}
+            onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1) }}
+            style={{ width: 64, height: 28, fontSize: 12, padding: '0 4px' }}
+          >
+            {PAGE_SIZE_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <span>per page</span>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -292,57 +387,26 @@ export default function DriversPage() {
               </div>
             )}
 
-            {!loading && !error && drivers.length === 0 && (
+            {!loading && !error && allDrivers.length === 0 && (
               <EmptyState onCreateClick={() => setCreateOpen(true)} />
             )}
 
-            {!loading && !error && drivers.length > 0 && (
-              <DriverTable
-                drivers={(() => {
-                  if (!statusFilter) return drivers
-
-                  if (statusFilter === 'ZERO_CERTIFIED')
-                    return drivers.filter(d => tagBool(d, 'zeroCertified'))
-
-                  if (statusFilter === 'POLICE_VERIFIED')
-                    return drivers.filter(d => d.status === 'POLICE_VERIFIED' || tagBool(d, 'policeVerified'))
-
-                  if (statusFilter === 'DOCS_VERIFIED')
-                    return drivers.filter(d => {
-                      const docs = Object.values(d.documents || {})
-                      return docs.length > 0 && docs.every(doc => typeof doc === 'object' && doc?.status === 'APPROVED')
-                    })
-
-                  if (statusFilter === 'DOCS_PENDING')
-                    return drivers.filter(d =>
-                      Object.values(d.documents || {}).some(doc => {
-                        if (typeof doc === 'string') return true  // raw doc ID = pending upload
-                        return doc?.status === 'PENDING' || doc?.status === 'PENDING_VERIFICATION'
-                      })
-                    )
-
-                  if (statusFilter === 'DOCS_UNVERIFIED')
-                    return drivers.filter(d =>
-                      Object.keys(d.documents || {}).length === 0 && (d.docCount ?? 0) === 0
-                    )
-
-                  if (statusFilter === 'DOCS_REJECTED')
-                    return drivers.filter(d =>
-                      Object.values(d.documents || {}).some(doc =>
-                        typeof doc === 'object' && doc?.status === 'REJECTED'
-                      )
-                    )
-
-                  // fallback → status match (VERIFIED / UNVERIFIED / PENDING_VERIFICATION)
-                  return drivers.filter(d => d.status === statusFilter)
-                })()}
-                onView={handleViewDriver}
-                onEdit={() => setCreateOpen(true)}
-                onDelete={() => showToast('Delete', 'Wire up delete API when ready.')}
-                onViewDocs={handleViewDriverDocs}
-                onViewVendor={({ id, name }) => setVendorModal({ open: true, id, name })}
-              />
-            )}
+            {!loading && !error && allDrivers.length > 0 && (() => {
+              const { paged, total, pages } = getFilteredDrivers()
+              return (
+                <>
+                  <DriverTable
+                    drivers={paged}
+                    onView={handleViewDriver}
+                    onEdit={() => setCreateOpen(true)}
+                    onDelete={() => showToast('Delete', 'Wire up delete API when ready.')}
+                    onViewDocs={handleViewDriverDocs}
+                    onViewVendor={({ id, name }) => setVendorModal({ open: true, id, name })}
+                  />
+                  {renderPagination(total, pages)}
+                </>
+              )
+            })()}
           </>
         )}
       </div>
@@ -351,7 +415,7 @@ export default function DriversPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onDriverCreated={handleDriverCreated}
-        existingDrivers={drivers}
+        existingDrivers={allDrivers}
       />
       <AssignDocumentModal
         open={!!assignDocDriver}

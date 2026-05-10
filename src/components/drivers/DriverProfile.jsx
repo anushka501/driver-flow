@@ -1,50 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import Avatar from '../shared/Avatar';
 import { Icons } from '../../assets/icons';
-import { statusBadgeClass, statusLabel, docStatusBadgeClass , tagBool, getTag, formatUpdatedAt} from '../../utils/helpers';
+import { statusBadgeClass, statusLabel, docStatusBadgeClass, tagBool, getTag } from '../../utils/helpers';
 
 const TABS = [
-  { id: 'overview',   label: 'Overview'       },
-  { id: 'profile',    label: 'Profile'         },
-  { id: 'documents',  label: 'Document Review' },
-  { id: 'vehicles',   label: 'Vehicles'        },
-  { id: 'location',   label: 'Location'        },
-  { id: 'routes',     label: 'Routes'          },
-  { id: 'trips',      label: 'Trip History'    },
-  { id: 'performance',label: 'Performance'     },
+  { id: 'overview',    label: 'Overview'       },
+  { id: 'profile',     label: 'Profile'        },
+  { id: 'documents',   label: 'Document Review'},
+  { id: 'vehicles',    label: 'Vehicles'       },
+  { id: 'location',    label: 'Location'       },
+  { id: 'routes',      label: 'Routes'         },
+  { id: 'trips',       label: 'Trip History'   },
+  { id: 'performance', label: 'Performance'    },
 ];
 
-// All doc types matching admin portal (Image 4)
 const DOC_TYPES = [
   'AADHAR', 'CONTRACT', 'DRIVERS_LICENSE', 'INSURANCE',
   'PAN', 'PASSPORT', 'POLICE_VERIFICATION', 'POLICY_DOCUMENT',
   'POLLUTION', 'REGISTRATION', 'SAFETY_STICKER', 'VEHICLE_FITNESS', 'OTHERS',
 ];
 
-function normalizeDoc(doc, docType) {
-  if (!doc) return null;
-  if (typeof doc === 'string') {
-    return {
-      id: doc,
-      documentId: doc,
-      fileName: doc,
-      status: 'PENDING_VERIFICATION',
-      type: docType,
-    };
-  }
-
-  return {
-    ...doc,
-    id: doc.id || doc.documentId,
-    documentId: doc.documentId || doc.id,
-    fileName: doc.fileName || doc.filename || doc.meta?.filename || doc.documentId || doc.id,
-    fileUrl: doc.fileUrl || doc.url || doc.downloadUrl,
-    status: doc.status || 'PENDING_VERIFICATION',
-    type: doc.type || docType,
-  };
+function formatUpdatedAt(updatedAt) {
+  const epoch = updatedAt?.epochSeconds
+  if (!epoch) return '—'
+  const date = new Date(epoch * 1000)
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    + ' ' + date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
-export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, onRejectDoc, onAssignDoc,onUpdate, activeTabOverride }) {
+export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, onRejectDoc, onAssignDoc, onUpdate, activeTabOverride }) {
   const [activeTab, setActiveTab] = useState(activeTabOverride || 'overview');
 
   if (!driver) return null;
@@ -54,7 +38,6 @@ export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, on
 
   return (
     <div className="fade-in">
-      {/* Profile Banner */}
       <div className="prof-banner">
         <Avatar name={driver.name} size="lg" />
         <div style={{ flex: 1 }}>
@@ -73,7 +56,6 @@ export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, on
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="tabs-bar">
         {TABS.map(tab => (
           <div key={tab.id} className={`tab-item${activeTab === tab.id ? ' active' : ''}`} onClick={() => setActiveTab(tab.id)}>
@@ -82,8 +64,8 @@ export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, on
         ))}
       </div>
 
-      {activeTab === 'overview'    && <OverviewTab    driver={driver} onTabSwitch={setActiveTab} />}
-      {activeTab === 'profile'     && <ProfileTab     driver={driver} onUpdate={onUpdate} />}
+      {activeTab === 'overview'    && <OverviewTab    driver={driver} onTabSwitch={setActiveTab} formatUpdatedAt={formatUpdatedAt} />}
+      {activeTab === 'profile'     && <ProfileTab     driver={driver} onUpdate={onUpdate} formatUpdatedAt={formatUpdatedAt} />}
       {activeTab === 'documents'   && <DocumentsTab   driver={driver} onApprove={onApproveDoc} onReject={onRejectDoc} onAssign={onAssignDoc} />}
       {activeTab === 'vehicles'    && <VehiclesTab    driver={driver} />}
       {activeTab === 'location'    && <LocationTab    driver={driver} />}
@@ -95,7 +77,7 @@ export default function DriverProfile({ driver, onBack, onEdit, onApproveDoc, on
 }
 
 /* ── OVERVIEW TAB ── */
-function OverviewTab({ driver, onTabSwitch }) {
+function OverviewTab({ driver, onTabSwitch, formatUpdatedAt }) {
   return (
     <div className="fade-in">
       <div className="two-col">
@@ -106,15 +88,15 @@ function OverviewTab({ driver, onTabSwitch }) {
             <div className="ib-row"><span className="ib-key">Status</span><span className={`badge ${statusBadgeClass(driver.status)}`}>{statusLabel(driver.status)}</span></div>
             <div className="ib-row"><span className="ib-key">Phone</span><span className="ib-val ib-val-mono">{driver.phone || <span className="ib-val-empty">—</span>}</span></div>
             <div className="ib-row"><span className="ib-key">Vendor</span><span className="ib-val">{driver.vendor || <span className="ib-val-empty">—</span>}</span></div>
-            <div className="ib-row"><span className="ib-key">Last Updated</span><span className="ib-val">{driver.lastUpdated || '—'}</span></div>
-            <div className="ib-row"><span className="ib-key">Doc Count</span><span className="ib-val ib-val-mono">{driver.docCount ?? 0}</span></div>
+            <div className="ib-row"><span className="ib-key">Last Updated</span><span className="ib-val">{formatUpdatedAt(driver.updatedAt)}</span></div>
+            <div className="ib-row"><span className="ib-key">Doc Count</span><span className="ib-val ib-val-mono">{driver.docCount ?? Object.keys(driver.documents || {}).length}</span></div>
           </div>
         </div>
         <div className="ib">
           <div className="ib-hdr">Quick Actions</div>
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button className="btn btn-sm" onClick={() => onTabSwitch('documents')} style={{ justifyContent: 'flex-start' }}>
-              <Icons.FileText /> Review Documents ({driver.docCount ?? 0})
+              <Icons.FileText /> Review Documents ({driver.docCount ?? Object.keys(driver.documents || {}).length})
             </button>
             <button className="btn btn-sm" onClick={() => onTabSwitch('vehicles')} style={{ justifyContent: 'flex-start' }}>
               <Icons.Car /> View Vehicles
@@ -129,7 +111,6 @@ function OverviewTab({ driver, onTabSwitch }) {
         </div>
       </div>
 
-      {/* Mini map preview */}
       <div className="map-wrap">
         <div className="card-hdr">
           <span className="card-title">Live Location</span>
@@ -157,23 +138,19 @@ function OverviewTab({ driver, onTabSwitch }) {
 }
 
 /* ── PROFILE TAB ── */
-function ProfileTab({ driver, onUpdate }) {
+function ProfileTab({ driver, onUpdate, formatUpdatedAt }) {
   const [saving, setSaving] = useState(null)
 
-  // Tags store the boolean values as strings "true"/"false"
-  const isActive        = tagBool(driver, 'isActive')
-  const zeroCertified   = tagBool(driver, 'zeroCertified')
-  const pushNotifs      = tagBool(driver, 'pushNotifications')
-  const phone           = getTag(driver, 'phone') || driver.phone || ''
+  const isActive      = tagBool(driver, 'isActive')
+  const zeroCertified = tagBool(driver, 'zeroCertified')
+  const pushNotifs    = tagBool(driver, 'pushNotifications')
+  const phone         = getTag(driver, 'phone') || driver.phone || ''
 
   async function handleToggle(tagKey, currentVal) {
     setSaving(tagKey)
     try {
       await onUpdate(driver.id, {
-        tags: {
-          ...(driver.tags || {}),
-          [tagKey]: String(!currentVal),
-        },
+        tags: { ...(driver.tags || {}), [tagKey]: String(!currentVal) },
       })
     } finally {
       setSaving(null)
@@ -192,7 +169,6 @@ function ProfileTab({ driver, onUpdate }) {
             <div className="ib-row"><span className="ib-key">License Plate</span><span className="ib-val ib-val-mono">{getTag(driver, 'licensePlate') || <span className="ib-val-empty">—</span>}</span></div>
           </div>
         </div>
-
         <div className="ib">
           <div className="ib-hdr">Driver Details</div>
           <div className="ib-grid">
@@ -207,27 +183,9 @@ function ProfileTab({ driver, onUpdate }) {
       <div className="ib">
         <div className="ib-hdr">Account Settings</div>
         <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <ToggleRow
-            label="Active"
-            sublabel="Driver is available for assignments"
-            value={isActive}
-            saving={saving === 'isActive'}
-            onChange={() => handleToggle('isActive', isActive)}
-          />
-          <ToggleRow
-            label="Zero Certified"
-            sublabel="Driver has completed Zero certification"
-            value={zeroCertified}
-            saving={saving === 'zeroCertified'}
-            onChange={() => handleToggle('zeroCertified', zeroCertified)}
-          />
-          <ToggleRow
-            label="Push Notifications"
-            sublabel="Receive ride and alert notifications"
-            value={pushNotifs}
-            saving={saving === 'pushNotifications'}
-            onChange={() => handleToggle('pushNotifications', pushNotifs)}
-          />
+          <ToggleRow label="Active" sublabel="Driver is available for assignments" value={isActive} saving={saving === 'isActive'} onChange={() => handleToggle('isActive', isActive)} />
+          <ToggleRow label="Zero Certified" sublabel="Driver has completed Zero certification" value={zeroCertified} saving={saving === 'zeroCertified'} onChange={() => handleToggle('zeroCertified', zeroCertified)} />
+          <ToggleRow label="Push Notifications" sublabel="Receive ride and alert notifications" value={pushNotifs} saving={saving === 'pushNotifications'} onChange={() => handleToggle('pushNotifications', pushNotifs)} />
         </div>
       </div>
     </div>
@@ -243,12 +201,7 @@ function ToggleRow({ label, sublabel, value, onChange, saving }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {saving && <span style={{ fontSize: 10, color: 'var(--g400)', fontFamily: 'var(--mono)' }}>Saving...</span>}
-        <button
-          className={`toggle${value ? '' : ' off'}`}
-          onClick={onChange}
-          disabled={saving}
-          style={{ opacity: saving ? 0.6 : 1 }}
-        >
+        <button className={`toggle${value ? '' : ' off'}`} onClick={onChange} disabled={saving} style={{ opacity: saving ? 0.6 : 1 }}>
           <div className="toggle-knob" />
         </button>
       </div>
@@ -256,9 +209,9 @@ function ToggleRow({ label, sublabel, value, onChange, saving }) {
   )
 }
 
-/* ── DOCUMENTS TAB ── matching Image 4 exactly ── */
+/* ── DOCUMENTS TAB ── uses embedded driver.documents, skips broken API ── */
 function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
-  const [apiDocMap, setApiDocMap]     = useState(null)   // null = not yet loaded
+  const [apiDocMap, setApiDocMap]     = useState(null)
   const [docsLoading, setDocsLoading] = useState(true)
   const [docsError, setDocsError]     = useState('')
 
@@ -267,46 +220,33 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
     setDocsLoading(true)
     setDocsError('')
 
-    import('../../api/documents').then(({ getDocuments, normalizeDocuments }) =>
-      getDocuments(driver.id)
-    ).then(raw => {
-      if (cancelled) return
-      // normalizeDocuments converts array or wrapped response → { TYPE: docObj }
-      import('../../api/documents').then(({ normalizeDocuments }) => {
-        const map = normalizeDocuments(raw)
-        setApiDocMap(map)
+    import('../../api/documents')
+      .then(({ getDocuments, normalizeDocuments }) =>
+        getDocuments(driver.id).then(raw => {
+          if (cancelled) return
+          setApiDocMap(normalizeDocuments(raw))
+          setDocsLoading(false)
+        })
+      )
+      .catch(err => {
+        if (cancelled) return
+        console.warn('getDocuments failed, using embedded data:', err.message)
+        setDocsError('Could not fetch live document details.')
+        setApiDocMap(null)
         setDocsLoading(false)
       })
-    }).catch(err => {
-      if (cancelled) return
-      console.warn('getDocuments failed, using embedded data:', err.message)
-      setDocsError('Could not fetch live document details.')
-      setApiDocMap(null)
-      setDocsLoading(false)
-    })
 
     return () => { cancelled = true }
   }, [driver.id])
 
-  // Merge: API data wins; fall back to embedded driver.documents
   const embeddedDocs = driver.documents || {}
 
   function resolveDoc(docType) {
-    // Use api map if loaded, otherwise embedded
     const source = apiDocMap ?? embeddedDocs
     const raw = source[docType]
-
     if (!raw) return null
     if (typeof raw === 'string') {
-      return {
-        documentId: raw,
-        id: raw,
-        status: null,
-        fileName: null,
-        fileUrl: null,
-        uploadedAt: null,
-        reviewedBy: null,
-      }
+      return { documentId: raw, id: raw, status: null, fileName: null, fileUrl: null, uploadedAt: null, reviewedBy: null }
     }
     return {
       documentId: raw.documentId || raw.id || null,
@@ -321,7 +261,6 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
 
   return (
     <div className="fade-in">
-      {/* Driver Information header */}
       <div style={{ background: 'var(--w)', border: '1px solid var(--g200)', borderRadius: 'var(--r2)', padding: '16px 20px', marginBottom: 16, boxShadow: 'var(--sh)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--g500)" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -341,9 +280,7 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--g100)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--g800)' }}>
             Documents
-            {docsLoading && (
-              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--g400)', fontWeight: 400 }}>Loading…</span>
-            )}
+            {docsLoading && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--g400)', fontWeight: 400 }}>Loading…</span>}
           </span>
           <button className="btn btn-primary btn-sm" onClick={() => onAssign && onAssign(driver)}>+ Assign Document</button>
         </div>
@@ -368,87 +305,51 @@ function DocumentsTab({ driver, onApprove, onReject, onAssign }) {
                 const statusVal = doc?.status
                 return (
                   <tr key={docType}>
-                    {/* Document Type */}
                     <td className="dt">{docType}</td>
-
-                    {/* Document ID */}
                     <td>
                       {doc?.documentId
                         ? <span style={{ fontSize: 10, fontFamily: 'var(--mono)', color: 'var(--g400)' }} title={doc.documentId}>{doc.documentId.slice(0, 14)}…</span>
-                        : <span className="nd">—</span>
-                      }
+                        : <span className="nd">—</span>}
                     </td>
-
-                    {/* File Name */}
                     <td>
                       {doc?.fileName
                         ? <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g600)' }}>{doc.fileName}</span>
                         : hasDoc
                           ? <span style={{ fontSize: 11, color: 'var(--g400)' }}>—</span>
-                          : <span className="nd">—</span>
-                      }
+                          : <span className="nd">—</span>}
                     </td>
-
-                    {/* Status */}
                     <td>
                       {hasDoc && statusVal
                         ? <span className={`badge ${docStatusBadgeClass(statusVal)}`}>{statusVal}</span>
                         : hasDoc
                           ? <span className="badge badge-gray">UPLOADED</span>
-                          : <span className="nd">—</span>
-                      }
+                          : <span className="nd">—</span>}
                     </td>
-
-                    {/* Uploaded At */}
                     <td style={{ fontSize: 11, color: 'var(--g400)', whiteSpace: 'nowrap' }}>
                       {doc?.uploadedAt
                         ? new Date(doc.uploadedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                        : <span className="nd">—</span>
-                      }
+                        : <span className="nd">—</span>}
                     </td>
-
-                    {/* Reviewed By */}
                     <td style={{ fontSize: 11, color: 'var(--g500)' }}>
                       {doc?.reviewedBy || <span className="nd">—</span>}
                     </td>
-
-                    {/* Document link */}
                     <td>
                       {doc?.fileUrl
-                        ? (
-                          <button className="btn btn-sm" onClick={() => window.open(doc.fileUrl, '_blank')}>
+                        ? <button className="btn btn-sm" onClick={() => window.open(doc.fileUrl, '_blank')}>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                             View
                           </button>
-                        )
                         : hasDoc
                           ? <span className="nd" style={{ fontSize: 10 }}>No URL</span>
-                          : <span className="nd">No Document</span>
-                      }
+                          : <span className="nd">No Document</span>}
                     </td>
-
-                    {/* Review Actions */}
                     <td>
                       {hasDoc ? (
                         <div style={{ display: 'flex', gap: 5 }}>
-                          <button
-                            className="btn btn-sm"
-                            style={{ background: 'var(--gl)', color: 'var(--green)', border: '1px solid var(--gb)' }}
-                            onClick={() => onApprove && onApprove(driver, docType)}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className="btn btn-sm"
-                            style={{ background: 'var(--rl)', color: 'var(--red)', border: '1px solid var(--rb)' }}
-                            onClick={() => onReject && onReject(driver, docType)}
-                          >
-                            Reject
-                          </button>
+                          <button className="btn btn-sm" style={{ background: 'var(--gl)', color: 'var(--green)', border: '1px solid var(--gb)' }} onClick={() => onApprove && onApprove(driver, docType)}>Approve</button>
+                          <button className="btn btn-sm" style={{ background: 'var(--rl)', color: 'var(--red)', border: '1px solid var(--rb)' }} onClick={() => onReject && onReject(driver, docType)}>Reject</button>
                         </div>
-                      ) : (
-                        <span className="nd">—</span>
-                      )}
+                      ) : <span className="nd">—</span>}
                     </td>
                   </tr>
                 )
@@ -482,9 +383,7 @@ function VehiclesTab({ driver }) {
             </thead>
             <tbody>
               {vehicles.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)', fontSize: 12 }}>
-                  No vehicles associated with this driver
-                </td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)', fontSize: 12 }}>No vehicles associated with this driver</td></tr>
               ) : vehicles.map(v => (
                 <tr key={v.plate} className="clickable">
                   <td><span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>{v.plate}</span></td>
@@ -509,10 +408,9 @@ function VehiclesTab({ driver }) {
   );
 }
 
-/* ── LOCATION TAB — Google Maps of Hyderabad, fully scrollable ── */
+/* ── LOCATION TAB ── */
 function LocationTab({ driver }) {
   const [isOnline, setIsOnline] = useState(false);
-
   return (
     <div className="fade-in">
       <div className="card" style={{ marginBottom: 12 }}>
@@ -528,51 +426,32 @@ function LocationTab({ driver }) {
             </button>
           </div>
         </div>
-
         {!isOnline && (
           <div style={{ background: 'var(--ol)', borderBottom: '1px solid var(--ob)', padding: '8px 16px', fontSize: 11, color: 'var(--orange)' }}>
             Driver is offline · Last seen: {driver.lastSeen || '—'} · Showing last known location area
           </div>
         )}
-
-        {/* Full Google Maps embed — Hyderabad, India, scrollable */}
         <div style={{ height: 480, position: 'relative' }}>
           <iframe
             title="driver-location-map"
             src="https://maps.google.com/maps?q=Hyderabad,Telangana,India&z=13&output=embed&ll=17.3850,78.4867"
             style={{ width: '100%', height: '100%', border: 'none' }}
-            allowFullScreen
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
+            allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade"
           />
           {isOnline && (
-            <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 18, height: 18,
-              background: 'var(--blue)', borderRadius: '50%',
-              border: '3px solid #fff',
-              boxShadow: '0 0 0 6px rgba(37,99,235,0.25)',
-              pointerEvents: 'none',
-            }} />
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 18, height: 18, background: 'var(--blue)', borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 0 0 6px rgba(37,99,235,0.25)', pointerEvents: 'none' }} />
           )}
         </div>
-
         <div className="map-foot">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--g400)" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            <span style={{ fontSize: 11, color: 'var(--g400)' }}>
-              {isOnline ? 'Hyderabad, Telangana — live' : `Last seen: ${driver.lastSeen || '—'}`}
-            </span>
+            <span style={{ fontSize: 11, color: 'var(--g400)' }}>{isOnline ? 'Hyderabad, Telangana — live' : `Last seen: ${driver.lastSeen || '—'}`}</span>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g400)' }}>0 connected vehicles</span>
-          </div>
+          <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--g400)' }}>0 connected vehicles</span>
         </div>
       </div>
-
       <div style={{ background: 'var(--bl)', border: '1px solid var(--bb)', borderRadius: 'var(--r)', padding: '10px 14px', fontSize: 12, color: 'var(--blue)' }}>
-        Live location tracking will be available when the driver is online and the mobile app is connected. The map shows Hyderabad by default — scroll or zoom to explore.
+        Live location tracking will be available when the driver is online and the mobile app is connected.
       </div>
     </div>
   );
@@ -591,16 +470,11 @@ function RoutesTab({ driver }) {
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
-              <tr>
-                <th>Route ID</th><th>Route Name</th><th>Campus</th>
-                <th>Shift</th><th>Stops</th><th>Students</th><th>Status</th>
-              </tr>
+              <tr><th>Route ID</th><th>Route Name</th><th>Campus</th><th>Shift</th><th>Stops</th><th>Students</th><th>Status</th></tr>
             </thead>
             <tbody>
               {routes.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)', fontSize: 12 }}>
-                  No routes assigned to this driver
-                </td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)', fontSize: 12 }}>No routes assigned to this driver</td></tr>
               ) : routes.map(r => (
                 <tr key={r.id} className="clickable">
                   <td><span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--g500)' }}>{r.id}</span></td>
@@ -620,7 +494,7 @@ function RoutesTab({ driver }) {
   );
 }
 
-/* ── TRIP HISTORY TAB ── matching Image 6 layout ── */
+/* ── TRIP HISTORY TAB ── */
 function TripsTab({ driver }) {
   const trips = driver.trips || [];
   return (
@@ -633,16 +507,11 @@ function TripsTab({ driver }) {
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
-              <tr>
-                <th>Trip ID</th><th>Status</th><th>Date</th>
-                <th>Vehicle</th><th>Stops</th><th>Last Updated</th><th>Actions</th>
-              </tr>
+              <tr><th>Trip ID</th><th>Status</th><th>Date</th><th>Vehicle</th><th>Stops</th><th>Last Updated</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {trips.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)', fontSize: 12 }}>
-                  No trip history available
-                </td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--g400)', fontSize: 12 }}>No trip history available</td></tr>
               ) : trips.map(t => (
                 <tr key={t.id} className="clickable">
                   <td><span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--g500)' }}>{t.id}</span></td>
@@ -674,10 +543,10 @@ function PerformanceTab({ driver }) {
     <div className="fade-in">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
         {[
-          { label: 'Total Trips',  value: perf.totalTrips ?? '—',  color: 'var(--g900)' },
-          { label: 'Avg Rating',   value: perf.avgRating  ?? '—',  color: 'var(--green)' },
-          { label: 'On-Time %',    value: perf.onTimePercent ? `${perf.onTimePercent}%` : '—', color: 'var(--blue)' },
-          { label: 'Incidents',    value: perf.incidents  ?? '—',  color: 'var(--red)' },
+          { label: 'Total Trips', value: perf.totalTrips ?? '—', color: 'var(--g900)' },
+          { label: 'Avg Rating',  value: perf.avgRating  ?? '—', color: 'var(--green)' },
+          { label: 'On-Time %',   value: perf.onTimePercent ? `${perf.onTimePercent}%` : '—', color: 'var(--blue)' },
+          { label: 'Incidents',   value: perf.incidents  ?? '—', color: 'var(--red)' },
         ].map(s => (
           <div key={s.label} className="stat-card">
             <div className="stat-lbl">{s.label}</div>
