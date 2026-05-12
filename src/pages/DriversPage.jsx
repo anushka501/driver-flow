@@ -12,6 +12,7 @@ import { useAuth } from '../auth/AuthContext'
 import { getDriver, getDrivers, updateDriver } from '../api/drivers'
 import { searchVendors } from '../api/vendors'
 import { createAndUploadDocument, reviewDocument } from '../api/documents'
+import { fetchVehiclesByDriverMap } from '../api/vehicles'
 import { tagBool } from '../utils/helpers'
 import '../components/drivers/CreateDriverModal.css'
 
@@ -21,12 +22,13 @@ export default function DriversPage() {
   const { showToast } = useToast()
   const { logout } = useAuth()
 
-  const [allDrivers, setAllDrivers]               = useState([])   // full list from API
+  const [allDrivers, setAllDrivers]               = useState([])
   const [loading, setLoading]                     = useState(true)
   const [error, setError]                         = useState(null)
   const [currentPage, setCurrentPage]             = useState(1)
   const [pageSize, setPageSize]                   = useState(10)
   const [vendorMap, setVendorMap]                 = useState({})
+  const [vehicleMap, setVehicleMap]               = useState({})   // ← NEW
   const [selectedDriver, setSelectedDriver]       = useState(null)
   const [activeTabOverride, setActiveTabOverride] = useState(null)
   const [createOpen, setCreateOpen]               = useState(false)
@@ -34,7 +36,7 @@ export default function DriversPage() {
   const [vendorModal, setVendorModal]             = useState({ open: false, id: null, name: null })
   const [statusFilter, setStatusFilter]           = useState(null)
 
-  // ── Fetch ALL drivers once ───────────────────────────────
+  // ── Fetch ALL drivers + vehicles once ────────────────────
   const fetchDrivers = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -66,7 +68,24 @@ export default function DriversPage() {
     }
   }, [])
 
+  // ── Fetch vehicle map separately (non-blocking) ──────────
+  useEffect(() => {
+    fetchVehiclesByDriverMap()
+      .then(setVehicleMap)
+      .catch(() => {}) // silently fail — vehicle col just shows "—"
+  }, [])
+
   useEffect(() => { fetchDrivers() }, [fetchDrivers])
+
+  // ── Handle vehicle click ─────────────────────────────────
+  function handleViewVehicle(vehicle) {
+    // Opens the driver's profile on the Vehicles tab
+    const driver = allDrivers.find(d => d.id === vehicle.ownedBy)
+    if (driver) {
+      setActiveTabOverride('vehicles')
+      setSelectedDriver(driver)
+    }
+  }
 
   // ── Filtered + paginated drivers ─────────────────────────
   function getFilteredDrivers() {
@@ -274,12 +293,10 @@ export default function DriversPage() {
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 4px', marginTop: 8 }}>
-        {/* Left: item count */}
         <div style={{ fontSize: 12, color: 'var(--g400)' }}>
           {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, total)} of {total} drivers
         </div>
 
-        {/* Center: page buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <button
             className="btn btn-sm"
@@ -307,7 +324,6 @@ export default function DriversPage() {
           >›</button>
         </div>
 
-        {/* Right: page size selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--g400)' }}>
           <span>Show</span>
           <select
@@ -397,11 +413,13 @@ export default function DriversPage() {
                 <>
                   <DriverTable
                     drivers={paged}
+                    vehicleMap={vehicleMap}
                     onView={handleViewDriver}
                     onEdit={() => setCreateOpen(true)}
                     onDelete={() => showToast('Delete', 'Wire up delete API when ready.')}
                     onViewDocs={handleViewDriverDocs}
                     onViewVendor={({ id, name }) => setVendorModal({ open: true, id, name })}
+                    onViewVehicle={handleViewVehicle}
                   />
                   {renderPagination(total, pages)}
                 </>

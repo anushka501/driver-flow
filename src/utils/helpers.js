@@ -60,15 +60,22 @@ export function formatDate(dateStr) {
 
 export function getTag(driver, key, fallback = '') {
   const fromTags = driver?.tags?.[key]
-  if (fromTags !== undefined && fromTags !== null) return fromTags
+  if (fromTags !== undefined && fromTags !== null) {
+    if (typeof fromTags === 'object') return fallback  // ← never return raw object
+    return String(fromTags)
+  }
   const topLevel = driver?.[key]
-  if (topLevel !== undefined && topLevel !== null) return topLevel
+  if (topLevel !== undefined && topLevel !== null) {
+    if (typeof topLevel === 'object') return fallback  // ← never return raw object
+    return String(topLevel)
+  }
   return fallback
 }
 
 export function tagBool(driver, key) {
-  const v = getTag(driver, key, false)
-  return v === true || v === 'true' || v === 1 || v === '1'
+  const val = driver?.tags?.[key]
+  if (typeof val === 'object') return false  // ← objects are not booleans
+  return val === true || val === 'true'
 }
 
 // Format updatedAt from API's epoch format

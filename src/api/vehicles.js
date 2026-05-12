@@ -20,14 +20,12 @@ export function searchVehicles({ query = '*', limit = '', offset = '' } = {}) {
   return request(`/vehicles/search?${params.toString()}`)
 }
 
-// Fetch ALL vehicles and return a map of { [driverId]: vehicle }
 export async function fetchVehiclesByDriverMap() {
   try {
-    const res = await request(`/vehicles/search?query=*&limit=500`)
-    const list = Array.isArray(res) ? res : (res?.vehicles ?? [])
+    const res = await request(`/vehicles?pageSize=500`)
+    const list = Array.isArray(res) ? res : (res?.vehicles ?? res?.items ?? res?.data ?? [])
     const map = {}
     list.forEach(v => {
-      // ownedBy should be a real driver ID like "ZDR008851"
       if (v.ownedBy && v.ownedBy !== 'Driver') {
         map[v.ownedBy] = v
       }

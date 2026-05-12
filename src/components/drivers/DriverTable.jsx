@@ -27,7 +27,7 @@ const STATUS_ORDER      = { VERIFIED: 0, PENDING_VERIFICATION: 1, UNVERIFIED: 2 
 
 export default function DriverTable({
   drivers = [], onView, onEdit, onDelete, onViewDocs, onViewVendor,
-  statFilter,
+  statFilter, vehicleMap = {}, onViewVehicle,
 }) {
   const [search,       setSearch]       = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -80,7 +80,7 @@ export default function DriverTable({
         if (sortCol === 'lastUpd') {
           va = a.updatedAt?.epochSeconds || 0
           vb = b.updatedAt?.epochSeconds || 0
-          return sortDir === 'asc' ? va - vb : vb - va  // ← early return, no fall-through
+          return sortDir === 'asc' ? va - vb : vb - va
         }
         if (typeof va === 'string') {
           return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
@@ -151,6 +151,7 @@ export default function DriverTable({
                 Last Updated <SortIcon col="lastUpd" sortCol={sortCol} sortDir={sortDir} />
               </th>
               <th>Doc Count</th>
+              <th>Vehicle</th>
               <th>Vendor</th>
               <th>Actions</th>
             </tr>
@@ -158,7 +159,7 @@ export default function DriverTable({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--g400)', fontSize: 12 }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--g400)', fontSize: 12 }}>
                   No drivers found
                 </td>
               </tr>
@@ -167,11 +168,13 @@ export default function DriverTable({
                 <DriverRow
                   key={driver.id}
                   driver={driver}
+                  vehicle={vehicleMap[driver.id]}
                   onView={onView}
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onViewDocs={onViewDocs}
                   onViewVendor={onViewVendor}
+                  onViewVehicle={onViewVehicle}
                 />
               ))
             )}
@@ -182,7 +185,7 @@ export default function DriverTable({
   );
 }
 
-function DriverRow({ driver, onView, onEdit, onDelete, onViewDocs, onViewVendor }) {
+function DriverRow({ driver, vehicle, onView, onEdit, onDelete, onViewDocs, onViewVendor, onViewVehicle }) {
   const badgeClass = statusBadgeClass(driver.status);
   const dotClass   = statusDotClass(driver.status);
   const label      = statusLabel(driver.status);
@@ -262,6 +265,31 @@ function DriverRow({ driver, onView, onEdit, onDelete, onViewDocs, onViewVendor 
             </span>
           )
         })()}
+      </td>
+
+      {/* Vehicle */}
+      <td onClick={e => { e.stopPropagation(); vehicle && onViewVehicle && onViewVehicle(vehicle); }}>
+        {vehicle ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span
+              style={{
+                fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--blue)',
+                fontWeight: 600, cursor: 'pointer', textDecoration: 'underline',
+                textDecorationColor: 'var(--bb)',
+              }}
+              title={`${vehicle.make || ''} ${vehicle.model || ''} · Click to view details`.trim()}
+            >
+              {vehicle.licencePlate || vehicle.id}
+            </span>
+            {(vehicle.make || vehicle.model) && (
+              <span style={{ fontSize: 10, color: 'var(--g400)' }}>
+                {[vehicle.make, vehicle.model].filter(Boolean).join(' ')}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span style={{ color: 'var(--g300)', fontSize: 11 }}>—</span>
+        )}
       </td>
 
       {/* Vendor */}

@@ -137,11 +137,22 @@ export default function VehicleModal({ open, onClose, vehicleId }) {
           <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--g100)' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g700)', marginBottom: 10 }}>Tags</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {Object.entries(vehicle.tags).map(([key, val]) => (
-                <span key={key} style={{ fontSize: 11, padding: '2px 8px', background: 'var(--g100)', borderRadius: 4, color: 'var(--g600)', fontFamily: 'var(--mono)' }}>
-                  {key}: {String(val)}
-                </span>
-              ))}
+              {Object.entries(vehicle.tags).map(([key, val]) => {
+                if (val === null || val === undefined) return null
+                // If val is an object, render its sub-fields as separate tags
+                if (typeof val === 'object') {
+                    return Object.entries(val).map(([subKey, subVal]) => (
+                    <span key={`${key}-${subKey}`} style={{ fontSize: 11, padding: '2px 8px', background: 'var(--g100)', borderRadius: 4, color: 'var(--g600)', fontFamily: 'var(--mono)' }}>
+                        {key}.{subKey}: {String(subVal ?? '—')}
+                    </span>
+                    ))
+                }
+                return (
+                    <span key={key} style={{ fontSize: 11, padding: '2px 8px', background: 'var(--g100)', borderRadius: 4, color: 'var(--g600)', fontFamily: 'var(--mono)' }}>
+                    {key}: {String(val)}
+                    </span>
+                )
+                })}
             </div>
           </div>
         )}
