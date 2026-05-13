@@ -1,11 +1,12 @@
 import React from 'react';
+import logo from '../../assets/logo.png';
 import './Topbar.css';
 
 export default function Topbar({ pageTitle = 'Driver Management', onSearch, searchValue }) {
   return (
     <header className="topbar">
       <div className="tb-logo">
-        <div className="z-logo">Z</div>
+        <img src={logo} alt="ZeroMobIt" style={{ height: 28, width: 'auto', display: 'block' }} />
       </div>
 
       {/* Page title with icon — matching admin portal */}
@@ -26,7 +27,6 @@ export default function Topbar({ pageTitle = 'Driver Management', onSearch, sear
           value={searchValue || ''}
           onChange={e => onSearch && onSearch(e.target.value)}
         />
-        {/* Filter icons matching admin portal */}
         <button className="tb-icon-btn" title="Columns">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         </button>
@@ -43,19 +43,9 @@ export default function Topbar({ pageTitle = 'Driver Management', onSearch, sear
       {/* Right side — pagination numbers + refresh + avatar */}
       <div className="tb-right">
         <div className="tb-pagination">
-          <input
-            type="number"
-            className="tb-page-input"
-            defaultValue={800}
-            min={1}
-          />
+          <input type="number" className="tb-page-input" defaultValue={800} min={1} />
           <span className="tb-page-sep">›</span>
-          <input
-            type="number"
-            className="tb-page-input"
-            defaultValue={0}
-            min={0}
-          />
+          <input type="number" className="tb-page-input" defaultValue={0} min={0} />
         </div>
         <button className="tb-icon-btn tb-refresh" title="Refresh">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
